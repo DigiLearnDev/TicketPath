@@ -1,8 +1,5 @@
 @echo off
 cd /d "%~dp0"
-python generate_diagram.py
-if errorlevel 1 (
-    echo.
-    echo Chyba pri generovani diagramu. Zkontroluj tickets.txt.
-    pause
-)
+start "TicketTracer server" python server.py
+timeout /t 1 >nul
+start "" http://localhost:8765
