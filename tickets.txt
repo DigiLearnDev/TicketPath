@@ -1,0 +1,139 @@
+# ============================================================================
+# DigiLearn — stav ticketů #19–#39 (tracer-bullet implementace generation core)
+# Repo: https://github.com/DigiLearnDev/DigiLearn  (jen čtení — nic sem nezapisuje GitHub)
+# ============================================================================
+#
+# FORMÁT (pro agenta, který tento soubor aktualizuje):
+#
+#   Jeden ticket = jeden blok řádků "klíč: hodnota", bloky odděleny prázdným
+#   řádkem. Řádky začínající na "#" jsou komentář a ignorují se.
+#
+#   Povinné klíče:
+#     ticket:      číslo issue na GitHubu (jen číslo, bez #)
+#     title:       přesný název issue
+#     status:      open | closed
+#     blocked_by:  čísla ticketů oddělená čárkou, nebo "none"
+#
+#   Pořadí bloků v souboru není důležité (diagram si layout spočítá sám podle
+#   blocked_by), ale je hezčí je držet vzestupně podle čísla.
+#
+# JAK AKTUALIZOVAT (postup pro agenta):
+#   1. Zjisti aktuální stav přes `gh` (read-only, nic nezapisuj):
+#        gh issue list --repo DigiLearnDev/DigiLearn --search "is:issue" --json number,state
+#      Pro nové/neznámé tickety zjisti "Blocked by" ze sekce v těle issue:
+#        gh issue view <N> --repo DigiLearnDev/DigiLearn --json body -q .body
+#   2. Uprav odpovídající bloky níže (status, případně blocked_by, případně
+#      přidej nový blok pro nový ticket, pokud přibyl jako child #18).
+#   3. Spusť Aktualizovat-diagram.bat (nebo `python generate_diagram.py`) —
+#      přegeneruje diagram.html a otevře ho v prohlížeči.
+#
+#   NIKDY nic nezapisuj zpět do GitHubu ani do repa `digilearn/` — tenhle
+#   soubor a diagram žijí záměrně mimo repo, čistě jako lokální pomůcka.
+#
+# Poslední aktualizace dat: 2026-08-30 (načteno z GitHubu: #19-28,#30,#32,#33,#35-37 CLOSED; #29,#31,#34,#38,#39 OPEN)
+# ============================================================================
+
+ticket: 19
+title: Block Registry foundation: Text kind
+status: closed
+blocked_by: none
+
+ticket: 20
+title: AI Generator pipeline foundation: Text-only, single-shot
+status: closed
+blocked_by: 19
+
+ticket: 21
+title: Interpreter foundation: Text-only (fixture-driven)
+status: closed
+blocked_by: 19
+
+ticket: 22
+title: Wire Brief UI, Generator, and Interpreter end-to-end (Text-only)
+status: closed
+blocked_by: 20, 21
+
+ticket: 23
+title: Curriculum data: offline RVP ZV extraction pipeline
+status: closed
+blocked_by: 20
+
+ticket: 24
+title: Block Registry: static terminal kinds (Chart, Image, Sound player, Table, Chat)
+status: closed
+blocked_by: 22
+
+ticket: 25
+title: Block Registry: interactive terminal kinds (Quiz, Card reveal)
+status: closed
+blocked_by: 22
+
+ticket: 26
+title: Block Registry: container kinds (Columns, Horizontal array, Carousel)
+status: closed
+blocked_by: 22
+
+ticket: 27
+title: Generation Brief: full core + advanced controls
+status: closed
+blocked_by: 22, 33
+
+ticket: 28
+title: Generation Brief: accessibility/inclusion guidance
+status: closed
+blocked_by: 22, 33
+
+ticket: 29
+title: AI Generator: validation retry & Unresolved-Block recovery
+status: open
+blocked_by: 22, 33
+
+ticket: 30
+title: AI Generator: curriculum grounding
+status: closed
+blocked_by: 22, 23, 33
+
+ticket: 31
+title: AI Generator: free-tier quota/rate-limit handling
+status: open
+blocked_by: 29
+
+ticket: 32
+title: Run the RVP ZV offline extraction script against the real PDF
+status: closed
+blocked_by: 23
+
+ticket: 33
+title: Render from the DSL text: make serialized DSL the Generator→Interpreter interface
+status: closed
+blocked_by: none
+
+ticket: 34
+title: Showcase: run the whole generation core end-to-end and see it render
+status: open
+blocked_by: 27, 28, 29, 30, 31, 33, 35
+
+ticket: 35
+title: Chart renders without a hydration mismatch on server-rendered Documents
+status: closed
+blocked_by: 33
+
+ticket: 36
+title: Unresolved Block kind: renders like any Block, invisible to the LLM
+status: closed
+blocked_by: none
+
+ticket: 37
+title: Provider speaks in a conversation, not a single message
+status: closed
+blocked_by: none
+
+ticket: 38
+title: AI Generator: validation retry as a repair conversation
+status: open
+blocked_by: 37
+
+ticket: 39
+title: AI Generator: patch a mostly-good Document with Unresolved Blocks
+status: open
+blocked_by: 36, 38
