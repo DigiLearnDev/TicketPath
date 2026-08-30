@@ -13,8 +13,9 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
+import repo_store
+
 HERE = Path(__file__).resolve().parent
-TICKETS_FILE = HERE / "tickets.txt"
 OUTPUT_FILE = HERE / "diagram.html"
 
 
@@ -145,7 +146,7 @@ def render_card(ticket: dict, state: str, by_number: dict[int, dict]) -> str:
     """
 
 
-def build_html(tickets: list[dict]) -> str:
+def build_html(tickets: list[dict], header_extra: str = "") -> str:
     by_number = {t["number"]: t for t in tickets}
     layers = compute_layers(tickets)
 
@@ -242,6 +243,31 @@ def build_html(tickets: list[dict]) -> str:
   .meta {{
     color: var(--muted);
     font-size: 13px;
+  }}
+  .repo-switcher {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }}
+  .repo-switcher select {{
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 6px;
+  }}
+  .repo-switcher button {{
+    font: inherit;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
   }}
   .progress-row {{
     display: flex;
@@ -383,6 +409,7 @@ def build_html(tickets: list[dict]) -> str:
 <header>
   <h1>DigiLearn — implementační tickety (#19–#31)</h1>
   <div class="meta">generation core · tracer-bullet rozpad specu #18 · vygenerováno {now}</div>
+  {header_extra}
   <div class="progress-row">
     <div class="progress-track"><div class="progress-fill" style="width:{pct}%"></div></div>
     <div class="progress-text">{done_count} / {total} hotovo ({pct}%)</div>
@@ -438,7 +465,8 @@ def build_html(tickets: list[dict]) -> str:
 
 
 def main() -> None:
-    tickets = parse_tickets(TICKETS_FILE)
+    state = repo_store.load_app_state()
+    tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
     output = build_html(tickets)
     OUTPUT_FILE.write_text(output, encoding="utf-8")
     print(f"Vygenerovano: {OUTPUT_FILE}")

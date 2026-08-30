@@ -130,10 +130,10 @@ blocked_by: none
 
 ticket: 38
 title: AI Generator: validation retry as a repair conversation
-status: open
+status: closed
 blocked_by: 37
 
 ticket: 39
 title: AI Generator: patch a mostly-good Document with Unresolved Blocks
-status: open
+status: closed
 blocked_by: 36, 38
