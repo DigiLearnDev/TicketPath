@@ -33,6 +33,112 @@
 # Poslední aktualizace dat: 2026-08-30 (načteno z GitHubu: #19-28,#30,#32,#33,#35-37 CLOSED; #29,#31,#34,#38,#39 OPEN)
 # ============================================================================
 
+ticket: 1
+title: Wayfinder Map: DigiLearn Generation Core (DSL, AI Generator, Interpreter)
+status: closed
+blocked_by: none
+
+ticket: 2
+title: Research: DSL / structured-generation serialization approaches
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 3
+title: Decide: initial Block set for v1
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 4
+title: Research: LLM provider/model landscape (cost, structured output, context window)
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 5
+title: Design: Generation Brief schema
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 6
+title: Design: accessibility/inclusion handling in generation
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 7
+title: Prototype: DSL syntax candidates
+status: closed
+blocked_by: 2
+part_of: 1
+
+ticket: 8
+title: Design: Block Registry (schema + prompt-context docs)
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 9
+title: Decide: AI provider/model
+status: closed
+blocked_by: 4
+part_of: 1
+
+ticket: 10
+title: Design: AI Generator prompt architecture
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 11
+title: Design: Interpreter rendering approach
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 12
+title: Design: invalid/malformed DSL output handling
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 13
+title: Research: official curriculum (RVP) data availability and structure
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 14
+title: Design: curriculum (RVP) integration strategy for AI Generator
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 15
+title: Design: RVP ZV PDF-extraction pipeline for ZĂˇkladnĂ­ Ĺˇkola curriculum grounding
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 16
+title: Design: free-tier rate-limit/quota exhaustion handling for AI Generator calls
+status: closed
+blocked_by: 9
+part_of: 1
+
+ticket: 17
+title: Design: ingest new open-data RVP ZV into #15's shared curriculum-outcome shape
+status: closed
+blocked_by: none
+part_of: 1
+
+ticket: 18
+title: Spec: DigiLearn Generation Core (DSL, AI Generator, Interpreter)
+status: closed
+blocked_by: none
+
 ticket: 19
 title: Block Registry foundation: Text kind
 status: closed
@@ -51,7 +157,7 @@ blocked_by: 19
 ticket: 22
 title: Wire Brief UI, Generator, and Interpreter end-to-end (Text-only)
 status: closed
-blocked_by: 20, 21
+blocked_by: 20,21
 
 ticket: 23
 title: Curriculum data: offline RVP ZV extraction pipeline
@@ -76,42 +182,43 @@ blocked_by: 22
 ticket: 27
 title: Generation Brief: full core + advanced controls
 status: closed
-blocked_by: 22, 33
+blocked_by: 22,33
 
 ticket: 28
 title: Generation Brief: accessibility/inclusion guidance
 status: closed
-blocked_by: 22, 33
+blocked_by: 22,33
 
 ticket: 29
 title: AI Generator: validation retry & Unresolved-Block recovery
-status: open
-blocked_by: 22, 33
+status: closed
+blocked_by: 22,33
 
 ticket: 30
 title: AI Generator: curriculum grounding
 status: closed
-blocked_by: 22, 23, 33
+blocked_by: 22,23,33
 
 ticket: 31
 title: AI Generator: free-tier quota/rate-limit handling
-status: open
+status: closed
 blocked_by: 29
 
 ticket: 32
 title: Run the RVP ZV offline extraction script against the real PDF
 status: closed
 blocked_by: 23
+part_of: 23
 
 ticket: 33
-title: Render from the DSL text: make serialized DSL the Generator→Interpreter interface
+title: Render from the DSL text: make serialized DSL the Generatorâ†’Interpreter interface
 status: closed
 blocked_by: none
 
 ticket: 34
 title: Showcase: run the whole generation core end-to-end and see it render
-status: open
-blocked_by: 27, 28, 29, 30, 31, 33, 35
+status: closed
+blocked_by: 27,28,29,30,31,33,35
 
 ticket: 35
 title: Chart renders without a hydration mismatch on server-rendered Documents
@@ -122,18 +229,32 @@ ticket: 36
 title: Unresolved Block kind: renders like any Block, invisible to the LLM
 status: closed
 blocked_by: none
+part_of: 29
 
 ticket: 37
 title: Provider speaks in a conversation, not a single message
 status: closed
 blocked_by: none
+part_of: 29
 
 ticket: 38
 title: AI Generator: validation retry as a repair conversation
 status: closed
 blocked_by: 37
+part_of: 29
 
 ticket: 39
 title: AI Generator: patch a mostly-good Document with Unresolved Blocks
 status: closed
-blocked_by: 36, 38
+blocked_by: 36,38
+part_of: 29
+
+ticket: 40
+title: AI Generator: correlate retryDelaySeconds with the classified quota limit
+status: closed
+blocked_by: none
+
+ticket: 41
+title: Curriculum extraction script: abort batch immediately on GenerationQuotaError
+status: closed
+blocked_by: none
