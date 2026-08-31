@@ -85,6 +85,27 @@ def save_app_state(state: dict) -> None:
     )
 
 
+def load_diagram_state(repo: str) -> dict:
+    ensure_repo_files(repo)
+    return json.loads(diagram_state_path(repo).read_text(encoding="utf-8"))
+
+
+def save_diagram_state(repo: str, state: dict) -> None:
+    diagram_state_path(repo).write_text(
+        json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def set_manual_layer(repo: str, ticket_number: int, layer: int) -> dict:
+    state = load_diagram_state(repo)
+    state.setdefault("tickets", {})
+    key = str(ticket_number)
+    entry = state["tickets"].setdefault(key, {"manual_layer": None, "status_override": None})
+    entry["manual_layer"] = layer
+    save_diagram_state(repo, state)
+    return state
+
+
 def switch_active_repo(state: dict, repo: str) -> dict:
     """Adds repo to known_repos if new, makes it active, persists app-state.json."""
     if repo not in state["known_repos"]:

@@ -94,6 +94,32 @@ def compute_layers(tickets: list[dict]) -> dict[int, int]:
     return {t["number"]: layer_of(t["number"], set()) for t in tickets}
 
 
+def effective_layers(
+    tickets: list[dict], computed: dict[int, int], diagram_state: dict
+) -> tuple[dict[int, int], dict[int, bool]]:
+    """Applies manual_layer overrides from diagram-state.json over computed layers.
+
+    Returns (effective_layer_by_number, is_stale_by_number). A ticket is "stale"
+    when it has a manual override that no longer matches the freshly computed
+    layer (e.g. after a blocked_by edit) — it still renders at its manual layer,
+    just flagged.
+    """
+    overrides = diagram_state.get("tickets", {})
+    effective: dict[int, int] = {}
+    stale: dict[int, bool] = {}
+    for t in tickets:
+        number = t["number"]
+        entry = overrides.get(str(number))
+        manual = entry.get("manual_layer") if entry else None
+        if manual is not None:
+            effective[number] = manual
+            stale[number] = manual != computed[number]
+        else:
+            effective[number] = computed[number]
+            stale[number] = False
+    return effective, stale
+
+
 def ticket_state(ticket: dict, by_number: dict[int, dict]) -> str:
     if ticket["status"] == "closed":
         return "done"
@@ -109,7 +135,13 @@ ICON_OPEN = """<svg viewBox="0 0 20 20" class="icon"><circle cx="10" cy="10" r="
 ICON_DONE = """<svg viewBox="0 0 20 20" class="icon"><circle cx="10" cy="10" r="9" fill="currentColor"/><path d="M6 10.3l2.5 2.5L14.5 7" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
 
 
-def render_card(ticket: dict, state: str, by_number: dict[int, dict]) -> str:
+def render_card(
+    ticket: dict,
+    state: str,
+    by_number: dict[int, dict],
+    computed_layer: int,
+    is_stale: bool,
+) -> str:
     icon = ICON_DONE if state == "done" else ICON_OPEN
     title = html.escape(ticket["title"])
     number = ticket["number"]
@@ -133,8 +165,13 @@ def render_card(ticket: dict, state: str, by_number: dict[int, dict]) -> str:
 
     blocked_by_attr = ",".join(str(b) for b in blockers)
 
+    stale_cls = " stale-override" if is_stale else ""
+    stale_title = (
+        f' title="Vypočtená vrstva: Krok {computed_layer + 1}"' if is_stale else ""
+    )
+
     return f"""
-      <article class="card {state}" data-ticket="{number}" data-blocked-by="{blocked_by_attr}">
+      <article class="card {state}{stale_cls}" draggable="true" data-ticket="{number}" data-blocked-by="{blocked_by_attr}"{stale_title}>
         <div class="card-top">
           <span class="status-icon">{icon}</span>
           <span class="num">#{number}</span>
@@ -146,11 +183,17 @@ def render_card(ticket: dict, state: str, by_number: dict[int, dict]) -> str:
     """
 
 
-def build_html(tickets: list[dict], header_extra: str = "") -> str:
-    by_number = {t["number"]: t for t in tickets}
-    layers = compute_layers(tickets)
+def build_html(
+    tickets: list[dict], header_extra: str = "", diagram_state: dict | None = None
+) -> str:
+    if diagram_state is None:
+        diagram_state = {"tickets": {}, "phase_dividers": []}
 
-    max_layer = max(layers.values()) if layers else 0
+    by_number = {t["number"]: t for t in tickets}
+    computed = compute_layers(tickets)
+    layers, stale = effective_layers(tickets, computed, diagram_state)
+
+    max_layer = max(max(layers.values()), max(computed.values())) if layers else 0
     columns: list[list[dict]] = [[] for _ in range(max_layer + 1)]
     for t in tickets:
         columns[layers[t["number"]]].append(t)
@@ -164,11 +207,18 @@ def build_html(tickets: list[dict], header_extra: str = "") -> str:
     columns_html = []
     for i, col in enumerate(columns):
         cards_html = "\n".join(
-            render_card(t, ticket_state(t, by_number), by_number) for t in col
+            render_card(
+                t,
+                ticket_state(t, by_number),
+                by_number,
+                computed[t["number"]],
+                stale[t["number"]],
+            )
+            for t in col
         )
         columns_html.append(
             f"""
-        <div class="column">
+        <div class="column" data-layer="{i}">
           <div class="column-label">Krok {i + 1}</div>
           <div class="column-cards">{cards_html}</div>
         </div>
@@ -353,6 +403,17 @@ def build_html(tickets: list[dict], header_extra: str = "") -> str:
   .card.ready {{ border-left-color: var(--accent); }}
   .card.blocked {{ border-left-color: var(--border); }}
   .card.dim {{ opacity: 0.25; }}
+  .card.stale-override {{
+    border-style: dashed;
+    border-color: var(--amber);
+  }}
+  .card[draggable="true"] {{ cursor: grab; }}
+  .card.dragging {{ opacity: 0.4; }}
+  .column-cards.drag-over {{
+    outline: 2px dashed var(--accent);
+    outline-offset: 4px;
+    border-radius: 8px;
+  }}
   .card-top {{
     display: flex;
     align-items: center;
@@ -456,6 +517,46 @@ def build_html(tickets: list[dict], header_extra: str = "") -> str:
     }});
     card.addEventListener('mouseleave', () => {{
       cards.forEach(c => c.classList.remove('dim'));
+    }});
+  }});
+
+  cards.forEach(card => {{
+    card.addEventListener('dragstart', (e) => {{
+      card.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', card.dataset.ticket);
+      e.dataTransfer.effectAllowed = 'move';
+    }});
+    card.addEventListener('dragend', () => {{
+      card.classList.remove('dragging');
+    }});
+  }});
+
+  document.querySelectorAll('.column-cards').forEach(zone => {{
+    zone.addEventListener('dragover', (e) => {{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      zone.classList.add('drag-over');
+    }});
+    zone.addEventListener('dragleave', () => {{
+      zone.classList.remove('drag-over');
+    }});
+    zone.addEventListener('drop', async (e) => {{
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const ticket = e.dataTransfer.getData('text/plain');
+      const layer = Number(zone.closest('.column').dataset.layer);
+      if (!ticket) return;
+      const res = await fetch('/api/ticket-layer', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ ticket: Number(ticket), layer }}),
+      }});
+      if (res.ok) {{
+        window.location.reload();
+      }} else {{
+        const body = await res.json().catch(() => ({{}}));
+        alert(body.error || 'Nepodařilo se uložit přesun.');
+      }}
     }});
   }});
 </script>

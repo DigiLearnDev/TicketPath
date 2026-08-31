@@ -71,7 +71,10 @@ class DiagramHandler(BaseHTTPRequestHandler):
 
         state = repo_store.load_app_state()
         tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
-        body = build_html(tickets, header_extra=render_repo_switcher(state)).encode("utf-8")
+        diagram_state = repo_store.load_diagram_state(state["active_repo"])
+        body = build_html(
+            tickets, header_extra=render_repo_switcher(state), diagram_state=diagram_state
+        ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -79,15 +82,25 @@ class DiagramHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:
-        if self.path != "/api/repos":
-            self._send_json(404, {"error": "not found"})
+        if self.path == "/api/repos":
+            self._handle_switch_repo()
             return
+        if self.path == "/api/ticket-layer":
+            self._handle_set_ticket_layer()
+            return
+        self._send_json(404, {"error": "not found"})
 
+    def _read_json_body(self) -> dict | None:
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length) if length else b"{}"
         try:
-            payload = json.loads(raw)
+            return json.loads(raw)
         except json.JSONDecodeError:
+            return None
+
+    def _handle_switch_repo(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
             self._send_json(400, {"error": "invalid JSON"})
             return
 
@@ -99,6 +112,26 @@ class DiagramHandler(BaseHTTPRequestHandler):
         state = repo_store.load_app_state()
         state = repo_store.switch_active_repo(state, repo)
         self._send_json(200, state)
+
+    def _handle_set_ticket_layer(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+
+        try:
+            ticket = int(payload.get("ticket"))
+            layer = int(payload.get("layer"))
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "ticket and layer must be integers"})
+            return
+        if layer < 0:
+            self._send_json(400, {"error": "layer must be >= 0"})
+            return
+
+        state = repo_store.load_app_state()
+        diagram_state = repo_store.set_manual_layer(state["active_repo"], ticket, layer)
+        self._send_json(200, diagram_state)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
