@@ -15,11 +15,17 @@ import html
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import github_refresh
 import repo_store
 from generate_diagram import build_html, parse_tickets
 
 HOST = "localhost"
 PORT = 8765
+
+# In-memory only, per the spec: the "new ticket" badge has no dismiss state to
+# persist — it is only ever known for the lifetime of this server process and
+# is overwritten wholesale by the next refresh. Never written to disk.
+_new_tickets_by_repo: dict[str, set[int]] = {}
 
 
 def render_repo_switcher(state: dict) -> str:
@@ -62,6 +68,38 @@ def render_repo_switcher(state: dict) -> str:
     """
 
 
+def render_refresh_button() -> str:
+    return """
+    <div class="refresh-row">
+      <button type="button" id="refresh-btn">Aktualizovat</button>
+      <span id="refresh-status" class="refresh-status"></span>
+    </div>
+    <script>
+      (function() {
+        const btn = document.getElementById('refresh-btn');
+        const status = document.getElementById('refresh-status');
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          status.textContent = 'Aktualizuji z GitHubu…';
+          try {
+            const res = await fetch('/api/refresh', { method: 'POST' });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              status.textContent = body.error || 'Aktualizace selhala.';
+              btn.disabled = false;
+              return;
+            }
+            window.location.reload();
+          } catch (err) {
+            status.textContent = 'Aktualizace selhala.';
+            btn.disabled = false;
+          }
+        });
+      })();
+    </script>
+    """
+
+
 class DiagramHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/api/repos":
@@ -72,8 +110,13 @@ class DiagramHandler(BaseHTTPRequestHandler):
         state = repo_store.load_app_state()
         tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
         diagram_state = repo_store.load_diagram_state(state["active_repo"])
+        header_extra = render_repo_switcher(state) + render_refresh_button()
+        new_tickets = _new_tickets_by_repo.get(state["active_repo"], set())
         body = build_html(
-            tickets, header_extra=render_repo_switcher(state), diagram_state=diagram_state
+            tickets,
+            header_extra=header_extra,
+            diagram_state=diagram_state,
+            new_tickets=new_tickets,
         ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -90,6 +133,9 @@ class DiagramHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/ticket-status":
             self._handle_toggle_ticket_status()
+            return
+        if self.path == "/api/refresh":
+            self._handle_refresh()
             return
         self._send_json(404, {"error": "not found"})
 
@@ -155,6 +201,17 @@ class DiagramHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": str(exc)})
             return
         self._send_json(200, {"ticket": ticket, "status": new_status})
+
+    def _handle_refresh(self) -> None:
+        state = repo_store.load_app_state()
+        repo = state["active_repo"]
+        try:
+            tickets, new_numbers = github_refresh.refresh_repo(repo)
+        except Exception as exc:  # subprocess failure, malformed gh output, etc.
+            self._send_json(502, {"error": f"GitHub refresh selhal: {exc}"})
+            return
+        _new_tickets_by_repo[repo] = new_numbers
+        self._send_json(200, {"ticket_count": len(tickets), "new_tickets": sorted(new_numbers)})
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")

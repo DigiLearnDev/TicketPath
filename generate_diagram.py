@@ -57,12 +57,16 @@ def parse_tickets(path: Path) -> list[dict]:
         else:
             blocked_by = [int(x.strip()) for x in blocked_raw.split(",") if x.strip()]
 
+        part_of_raw = data.get("part_of", "").strip()
+        part_of = int(part_of_raw) if part_of_raw else None
+
         tickets.append(
             {
                 "number": number,
                 "title": title,
                 "status": status,
                 "blocked_by": blocked_by,
+                "part_of": part_of,
             }
         )
 
@@ -141,6 +145,7 @@ def render_card(
     by_number: dict[int, dict],
     computed_layer: int,
     is_stale: bool,
+    is_new: bool = False,
 ) -> str:
     icon = ICON_DONE if state == "done" else ICON_OPEN
     title = html.escape(ticket["title"])
@@ -157,8 +162,14 @@ def render_card(
             parts.append(f'<span class="{cls}" title="{html.escape(b_title)}">#{b}</span>')
         dep_html = f'<div class="deps">čeká na: {" ".join(parts)}</div>'
 
+    part_of_html = ""
+    if ticket.get("part_of") is not None:
+        part_of_html = f'<div class="part-of">část #{ticket["part_of"]}</div>'
+
     badge = ""
-    if state == "ready":
+    if is_new:
+        badge = '<span class="badge new">nové</span>'
+    elif state == "ready":
         badge = '<span class="badge ready">připraveno</span>'
     elif state == "blocked":
         badge = '<span class="badge blocked">blokováno</span>'
@@ -178,16 +189,22 @@ def render_card(
           {badge}
         </div>
         <h3>{title}</h3>
+        {part_of_html}
         {dep_html}
       </article>
     """
 
 
 def build_html(
-    tickets: list[dict], header_extra: str = "", diagram_state: dict | None = None
+    tickets: list[dict],
+    header_extra: str = "",
+    diagram_state: dict | None = None,
+    new_tickets: set[int] | None = None,
 ) -> str:
     if diagram_state is None:
         diagram_state = {"tickets": {}, "phase_dividers": []}
+    if new_tickets is None:
+        new_tickets = set()
 
     by_number = {t["number"]: t for t in tickets}
     computed = compute_layers(tickets)
@@ -213,6 +230,7 @@ def build_html(
                 by_number,
                 computed[t["number"]],
                 stale[t["number"]],
+                t["number"] in new_tickets,
             )
             for t in col
         )
@@ -318,6 +336,29 @@ def build_html(
     border-radius: 6px;
     padding: 3px 8px;
     cursor: pointer;
+  }}
+  .refresh-row {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 13px;
+  }}
+  .refresh-row button {{
+    font: inherit;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+  }}
+  .refresh-row button:disabled {{
+    opacity: 0.5;
+    cursor: default;
+  }}
+  .refresh-status {{
+    color: var(--muted);
   }}
   .progress-row {{
     display: flex;
@@ -450,6 +491,12 @@ def build_html(
   }}
   .badge.ready {{ background: var(--green-bg); color: var(--green); }}
   .badge.blocked {{ background: var(--gray-bg); color: var(--muted); }}
+  .badge.new {{ background: var(--amber-bg); color: var(--amber); }}
+  .part-of {{
+    font-size: 11px;
+    color: var(--muted);
+    margin: -2px 0 6px;
+  }}
   .card h3 {{
     font-size: 13.5px;
     line-height: 1.35;
