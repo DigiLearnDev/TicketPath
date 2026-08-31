@@ -3,3 +3,4 @@ app-state.json
 data/*/diagram-state.json
 __pycache__/
 *.pyc
+.vs/
