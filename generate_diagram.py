@@ -425,7 +425,8 @@ def build_html(
     max-width: 1400px;
     width: 100%;
     margin: 0 auto;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     flex: 1 1 auto;
     min-height: 0;
   }}
@@ -436,6 +437,7 @@ def build_html(
   }}
   .column {{
     min-width: 260px;
+    flex-shrink: 0;
   }}
   .column-label {{
     font-size: 12px;
@@ -448,9 +450,14 @@ def build_html(
   .column-cards {{
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    row-gap: 20px;
+    column-gap: 16px;
   }}
   .card {{
+    width: 260px;
+    flex: none;
     background: var(--panel);
     border: 1px solid var(--border);
     border-left: 4px solid var(--border);
@@ -636,11 +643,38 @@ def build_html(
 <script>
   const diagramWrap = document.querySelector('.diagram-wrap');
   diagramWrap.addEventListener('wheel', (e) => {{
-    if (e.ctrlKey) {{
-      e.preventDefault();
-      diagramWrap.scrollLeft += e.deltaY;
-    }}
+    e.preventDefault();
+    diagramWrap.scrollLeft += e.deltaY;
   }}, {{ passive: false }});
+
+  function sizeColumnCards() {{
+    const wrapRect = diagramWrap.getBoundingClientRect();
+    document.querySelectorAll('.column').forEach(col => {{
+      col.style.width = 'auto';
+      const el = col.querySelector('.column-cards');
+      el.style.height = 'auto';
+      el.style.width = 'auto';
+    }});
+    document.querySelectorAll('.column').forEach(col => {{
+      const el = col.querySelector('.column-cards');
+      const top = el.getBoundingClientRect().top - wrapRect.top + diagramWrap.scrollTop;
+      const height = Math.max(diagramWrap.clientHeight - top, 0);
+      el.style.height = height + 'px';
+      // Nested column-direction flex-wrap doesn't reliably report its own
+      // wrapped width, so measure the wrapped cards' real paint position
+      // and pin the container to that instead.
+      const cardsLeft = el.getBoundingClientRect().left;
+      let maxRight = 0;
+      el.querySelectorAll('.card').forEach(card => {{
+        maxRight = Math.max(maxRight, card.getBoundingClientRect().right - cardsLeft);
+      }});
+      const width = Math.max(maxRight, 260);
+      el.style.width = width + 'px';
+      col.style.width = width + 'px';
+    }});
+  }}
+  sizeColumnCards();
+  window.addEventListener('resize', sizeColumnCards);
 
   const cards = Array.from(document.querySelectorAll('.card'));
 
