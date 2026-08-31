@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -138,6 +139,47 @@ def toggle_ticket_status(repo: str, ticket_number: int) -> str:
 
     path.write_text(new_text, encoding="utf-8")
     return new_status_holder[0]
+
+
+def _find_divider(dividers: list[dict], divider_id: str) -> dict:
+    for d in dividers:
+        if d["id"] == divider_id:
+            return d
+    raise ValueError(f"phase divider {divider_id} not found")
+
+
+def add_phase_divider(repo: str, after_ticket: int, label: str = "") -> dict:
+    state = load_diagram_state(repo)
+    state.setdefault("phase_dividers", [])
+    divider = {"id": uuid.uuid4().hex, "label": label, "after_ticket": after_ticket}
+    state["phase_dividers"].append(divider)
+    save_diagram_state(repo, state)
+    return divider
+
+
+def move_phase_divider(repo: str, divider_id: str, after_ticket: int) -> dict:
+    state = load_diagram_state(repo)
+    divider = _find_divider(state.get("phase_dividers", []), divider_id)
+    divider["after_ticket"] = after_ticket
+    save_diagram_state(repo, state)
+    return divider
+
+
+def relabel_phase_divider(repo: str, divider_id: str, label: str) -> dict:
+    state = load_diagram_state(repo)
+    divider = _find_divider(state.get("phase_dividers", []), divider_id)
+    divider["label"] = label
+    save_diagram_state(repo, state)
+    return divider
+
+
+def delete_phase_divider(repo: str, divider_id: str) -> dict:
+    state = load_diagram_state(repo)
+    dividers = state.get("phase_dividers", [])
+    _find_divider(dividers, divider_id)
+    state["phase_dividers"] = [d for d in dividers if d["id"] != divider_id]
+    save_diagram_state(repo, state)
+    return state
 
 
 def switch_active_repo(state: dict, repo: str) -> dict:

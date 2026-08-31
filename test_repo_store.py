@@ -67,5 +67,75 @@ class ToggleTicketStatusTests(unittest.TestCase):
         self.assertIn("status: open", text_second)
 
 
+class PhaseDividerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self._orig_data_dir = repo_store.DATA_DIR
+        repo_store.DATA_DIR = Path(self.tmp.name) / "data"
+        self.addCleanup(self._restore_data_dir)
+        self.repo = "owner/repo"
+        repo_store.ensure_repo_files(self.repo)
+
+    def _restore_data_dir(self):
+        repo_store.DATA_DIR = self._orig_data_dir
+
+    def test_add_phase_divider_persists(self):
+        divider = repo_store.add_phase_divider(self.repo, 19)
+        self.assertEqual(divider["after_ticket"], 19)
+        self.assertEqual(divider["label"], "")
+        self.assertTrue(divider["id"])
+        state = repo_store.load_diagram_state(self.repo)
+        self.assertEqual(len(state["phase_dividers"]), 1)
+        self.assertEqual(state["phase_dividers"][0]["id"], divider["id"])
+
+    def test_add_multiple_phase_dividers_coexist(self):
+        repo_store.add_phase_divider(self.repo, 19)
+        repo_store.add_phase_divider(self.repo, 20)
+        state = repo_store.load_diagram_state(self.repo)
+        self.assertEqual(len(state["phase_dividers"]), 2)
+
+    def test_move_phase_divider_updates_after_ticket(self):
+        divider = repo_store.add_phase_divider(self.repo, 19)
+        updated = repo_store.move_phase_divider(self.repo, divider["id"], 20)
+        self.assertEqual(updated["after_ticket"], 20)
+        state = repo_store.load_diagram_state(self.repo)
+        self.assertEqual(state["phase_dividers"][0]["after_ticket"], 20)
+
+    def test_move_unknown_divider_raises(self):
+        with self.assertRaises(ValueError):
+            repo_store.move_phase_divider(self.repo, "nonexistent", 20)
+
+    def test_relabel_phase_divider_updates_label(self):
+        divider = repo_store.add_phase_divider(self.repo, 19)
+        updated = repo_store.relabel_phase_divider(self.repo, divider["id"], "generation core")
+        self.assertEqual(updated["label"], "generation core")
+        state = repo_store.load_diagram_state(self.repo)
+        self.assertEqual(state["phase_dividers"][0]["label"], "generation core")
+
+    def test_relabel_unknown_divider_raises(self):
+        with self.assertRaises(ValueError):
+            repo_store.relabel_phase_divider(self.repo, "nonexistent", "x")
+
+    def test_delete_phase_divider_removes_it(self):
+        divider = repo_store.add_phase_divider(self.repo, 19)
+        repo_store.add_phase_divider(self.repo, 20)
+        repo_store.delete_phase_divider(self.repo, divider["id"])
+        state = repo_store.load_diagram_state(self.repo)
+        self.assertEqual(len(state["phase_dividers"]), 1)
+        self.assertEqual(state["phase_dividers"][0]["after_ticket"], 20)
+
+    def test_delete_unknown_divider_raises(self):
+        with self.assertRaises(ValueError):
+            repo_store.delete_phase_divider(self.repo, "nonexistent")
+
+    def test_dividers_are_namespaced_per_repo(self):
+        other_repo = "owner/other"
+        repo_store.ensure_repo_files(other_repo)
+        repo_store.add_phase_divider(self.repo, 19)
+        other_state = repo_store.load_diagram_state(other_repo)
+        self.assertEqual(other_state["phase_dividers"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
