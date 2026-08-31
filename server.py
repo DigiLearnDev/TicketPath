@@ -88,6 +88,9 @@ class DiagramHandler(BaseHTTPRequestHandler):
         if self.path == "/api/ticket-layer":
             self._handle_set_ticket_layer()
             return
+        if self.path == "/api/ticket-status":
+            self._handle_toggle_ticket_status()
+            return
         self._send_json(404, {"error": "not found"})
 
     def _read_json_body(self) -> dict | None:
@@ -132,6 +135,26 @@ class DiagramHandler(BaseHTTPRequestHandler):
         state = repo_store.load_app_state()
         diagram_state = repo_store.set_manual_layer(state["active_repo"], ticket, layer)
         self._send_json(200, diagram_state)
+
+    def _handle_toggle_ticket_status(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+
+        try:
+            ticket = int(payload.get("ticket"))
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "ticket must be an integer"})
+            return
+
+        state = repo_store.load_app_state()
+        try:
+            new_status = repo_store.toggle_ticket_status(state["active_repo"], ticket)
+        except ValueError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        self._send_json(200, {"ticket": ticket, "status": new_status})
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")

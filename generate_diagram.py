@@ -173,7 +173,7 @@ def render_card(
     return f"""
       <article class="card {state}{stale_cls}" draggable="true" data-ticket="{number}" data-blocked-by="{blocked_by_attr}"{stale_title}>
         <div class="card-top">
-          <span class="status-icon">{icon}</span>
+          <button type="button" class="status-icon" data-toggle-status="{number}" title="Přepnout stav">{icon}</button>
           <span class="num">#{number}</span>
           {badge}
         </div>
@@ -420,7 +420,17 @@ def build_html(
     gap: 8px;
     margin-bottom: 6px;
   }}
-  .status-icon {{ display: inline-flex; color: var(--muted); }}
+  .status-icon {{
+    display: inline-flex;
+    color: var(--muted);
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    border-radius: 50%;
+  }}
+  .status-icon:hover {{ color: var(--accent); }}
   .card.done .status-icon {{ color: var(--green); }}
   .card.ready .status-icon {{ color: var(--accent); }}
   .icon {{ width: 18px; height: 18px; }}
@@ -528,6 +538,25 @@ def build_html(
     }});
     card.addEventListener('dragend', () => {{
       card.classList.remove('dragging');
+    }});
+  }});
+
+  document.querySelectorAll('[data-toggle-status]').forEach(btn => {{
+    btn.addEventListener('click', async (e) => {{
+      e.preventDefault();
+      e.stopPropagation();
+      const ticket = Number(btn.dataset.toggleStatus);
+      const res = await fetch('/api/ticket-status', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ ticket }}),
+      }});
+      if (res.ok) {{
+        window.location.reload();
+      }} else {{
+        const body = await res.json().catch(() => ({{}}));
+        alert(body.error || 'Nepodařilo se přepnout stav.');
+      }}
     }});
   }});
 
