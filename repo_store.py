@@ -31,6 +31,12 @@ def repo_slug(repo: str) -> str:
     return f"{owner}__{name}"
 
 
+def repo_short_name(repo: str) -> str:
+    """The repo name without its owner, e.g. 'DigiLearnDev/DigiLearn' -> 'DigiLearn'."""
+    _, _, name = repo.partition("/")
+    return name
+
+
 def repo_dir(repo: str) -> Path:
     return DATA_DIR / repo_slug(repo)
 

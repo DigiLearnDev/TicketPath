@@ -9,6 +9,7 @@ vysledny diagram.html je 100% samostatny a funguje i offline.
 from __future__ import annotations
 
 import html
+import json
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -211,6 +212,7 @@ def build_html(
     header_extra: str = "",
     diagram_state: dict | None = None,
     new_tickets: set[int] | None = None,
+    repo_short_name: str = "DigiLearn",
 ) -> str:
     if diagram_state is None:
         diagram_state = {"tickets": {}, "phase_dividers": []}
@@ -677,6 +679,13 @@ def build_html(
   window.addEventListener('resize', sizeColumnCards);
 
   const cards = Array.from(document.querySelectorAll('.card'));
+  const repoShortName = {json.dumps(repo_short_name)};
+
+  cards.forEach(card => {{
+    card.addEventListener('dblclick', () => {{
+      navigator.clipboard.writeText(`${{repoShortName}} ticket #${{card.dataset.ticket}}`);
+    }});
+  }});
 
   cards.forEach(card => {{
     const own = card.dataset.ticket;
@@ -876,7 +885,7 @@ def build_html(
 def main() -> None:
     state = repo_store.load_app_state()
     tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
-    output = build_html(tickets)
+    output = build_html(tickets, repo_short_name=repo_store.repo_short_name(state["active_repo"]))
     OUTPUT_FILE.write_text(output, encoding="utf-8")
     print(f"Vygenerovano: {OUTPUT_FILE}")
     webbrowser.open(OUTPUT_FILE.as_uri())

@@ -8,6 +8,14 @@ from tempfile import TemporaryDirectory
 import repo_store
 
 
+class RepoShortNameTests(unittest.TestCase):
+    def test_default_repo_matches_legacy_wording(self):
+        self.assertEqual(repo_store.repo_short_name("DigiLearnDev/DigiLearn"), "DigiLearn")
+
+    def test_other_repo(self):
+        self.assertEqual(repo_store.repo_short_name("DigiLearnDev/TicketTracer"), "TicketTracer")
+
+
 SAMPLE = """# comment line, should be preserved
 # another comment
 

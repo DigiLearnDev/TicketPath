@@ -117,6 +117,7 @@ class DiagramHandler(BaseHTTPRequestHandler):
             header_extra=header_extra,
             diagram_state=diagram_state,
             new_tickets=new_tickets,
+            repo_short_name=repo_store.repo_short_name(state["active_repo"]),
         ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
