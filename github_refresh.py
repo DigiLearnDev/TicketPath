@@ -24,6 +24,9 @@ query($owner: String!, $name: String!, $after: String) {
         subIssues(first: 50) {
           nodes { number state }
         }
+        labels(first: 10) {
+          nodes { name }
+        }
       }
     }
   }
@@ -35,6 +38,7 @@ BLOCKED_BY_SECTION_RE = re.compile(
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 ISSUE_REF_RE = re.compile(r"#(\d+)")
+CHUNK_LABEL_RE = re.compile(r"\bchunk\s*#(\d+)", re.IGNORECASE)
 
 
 def parse_blocked_by(body: str | None) -> list[int]:
@@ -49,6 +53,13 @@ def parse_blocked_by(body: str | None) -> list[int]:
     return [int(n) for n in ISSUE_REF_RE.findall(section)]
 
 
+def parse_chunk(labels: list[str]) -> int | None:
+    """Extracts the chunk number from `Chunk #N` labels. With more than one
+    matching label, the lowest number wins."""
+    numbers = [int(m.group(1)) for label in labels if (m := CHUNK_LABEL_RE.search(label))]
+    return min(numbers) if numbers else None
+
+
 def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
     part_of: dict[int, int] = {}
     for issue in raw_issues:
@@ -58,6 +69,7 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
     tickets = []
     for issue in raw_issues:
         number = issue["number"]
+        label_names = [n["name"] for n in issue.get("labels", {}).get("nodes", [])]
         tickets.append(
             {
                 "number": number,
@@ -65,6 +77,7 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
                 "status": "closed" if issue["state"] == "CLOSED" else "open",
                 "blocked_by": parse_blocked_by(issue.get("body")),
                 "part_of": part_of.get(number),
+                "chunk": parse_chunk(label_names),
             }
         )
     tickets.sort(key=lambda t: t["number"])
@@ -95,6 +108,8 @@ def render_tickets_file(header: str, tickets: list[dict]) -> str:
         ]
         if t.get("part_of") is not None:
             lines.append(f"part_of: {t['part_of']}")
+        if t.get("chunk") is not None:
+            lines.append(f"chunk: {t['chunk']}")
         blocks.append("\n".join(lines) + "\n")
     return header + "\n".join(blocks)
 
@@ -131,9 +146,9 @@ def fetch_all_issues(repo: str) -> list[dict]:
 
 def refresh_repo(repo: str) -> tuple[list[dict], set[int]]:
     """Fetches fresh issue data for `repo`, rewrites its tickets.txt, and returns
-    (tickets, newly_discovered_ticket_numbers). Never touches diagram-state.json —
-    the "new" badge is transient (in-memory, per the spec) and disappears on the
-    next refresh with no persisted dismiss state.
+    (tickets, newly_discovered_ticket_numbers). The "new" badge is transient
+    (in-memory, per the spec) and disappears on the next refresh with no
+    persisted dismiss state.
     """
     import generate_diagram
     import repo_store

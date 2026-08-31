@@ -42,6 +42,27 @@ class ParseBlockedByTests(unittest.TestCase):
         self.assertEqual(gr.parse_blocked_by(body), [5])
 
 
+class ParseChunkTests(unittest.TestCase):
+    def test_no_matching_label_returns_none(self):
+        self.assertIsNone(gr.parse_chunk(["bug", "priority: high"]))
+
+    def test_empty_labels_returns_none(self):
+        self.assertIsNone(gr.parse_chunk([]))
+
+    def test_single_chunk_label(self):
+        self.assertEqual(gr.parse_chunk(["Chunk #2", "bug"]), 2)
+
+    def test_case_insensitive(self):
+        self.assertEqual(gr.parse_chunk(["chunk #3"]), 3)
+
+    def test_multiple_chunk_labels_uses_lowest(self):
+        self.assertEqual(gr.parse_chunk(["Chunk #3", "Chunk #1"]), 1)
+
+    def test_substring_match_does_not_count_as_chunk_label(self):
+        self.assertIsNone(gr.parse_chunk(["rechunk #4"]))
+        self.assertIsNone(gr.parse_chunk(["prechunking #4"]))
+
+
 class BuildTicketsFromIssuesTests(unittest.TestCase):
     def test_basic_mapping(self):
         raw = [
@@ -59,8 +80,28 @@ class BuildTicketsFromIssuesTests(unittest.TestCase):
         self.assertEqual(tickets[0]["status"], "open")
         self.assertEqual(tickets[0]["blocked_by"], [])
         self.assertIsNone(tickets[0]["part_of"])
+        self.assertIsNone(tickets[0]["chunk"])
         self.assertEqual(tickets[1]["status"], "closed")
         self.assertEqual(tickets[1]["blocked_by"], [1])
+
+    def test_chunk_label_extracted(self):
+        raw = [
+            {
+                "number": 1,
+                "title": "First",
+                "state": "OPEN",
+                "body": "",
+                "subIssues": {"nodes": []},
+                "labels": {"nodes": [{"name": "Chunk #1"}, {"name": "bug"}]},
+            },
+        ]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertEqual(tickets[0]["chunk"], 1)
+
+    def test_missing_labels_field_defaults_to_no_chunk(self):
+        raw = [{"number": 1, "title": "First", "state": "OPEN", "body": "", "subIssues": {"nodes": []}}]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertIsNone(tickets[0]["chunk"])
 
     def test_sub_issues_become_part_of_badge_only(self):
         raw = [
@@ -127,6 +168,18 @@ class RenderTicketsFileTests(unittest.TestCase):
         text = gr.render_tickets_file(header, tickets)
         self.assertNotIn("part_of:", text)
 
+    def test_chunk_line_emitted_when_present(self):
+        header = ""
+        tickets = [{"number": 1, "title": "T", "status": "open", "blocked_by": [], "part_of": None, "chunk": 2}]
+        text = gr.render_tickets_file(header, tickets)
+        self.assertIn("chunk: 2\n", text)
+
+    def test_chunk_line_omitted_when_absent(self):
+        header = ""
+        tickets = [{"number": 1, "title": "T", "status": "open", "blocked_by": [], "part_of": None, "chunk": None}]
+        text = gr.render_tickets_file(header, tickets)
+        self.assertNotIn("chunk:", text)
+
     def test_round_trip_with_parse_tickets(self):
         import tempfile
         from pathlib import Path
@@ -135,8 +188,8 @@ class RenderTicketsFileTests(unittest.TestCase):
 
         header = "# header\n\n"
         tickets = [
-            {"number": 1, "title": "First", "status": "open", "blocked_by": [], "part_of": None},
-            {"number": 2, "title": "Second", "status": "closed", "blocked_by": [1], "part_of": 1},
+            {"number": 1, "title": "First", "status": "open", "blocked_by": [], "part_of": None, "chunk": None},
+            {"number": 2, "title": "Second", "status": "closed", "blocked_by": [1], "part_of": 1, "chunk": 2},
         ]
         text = gr.render_tickets_file(header, tickets)
         with tempfile.TemporaryDirectory() as d:
@@ -144,8 +197,10 @@ class RenderTicketsFileTests(unittest.TestCase):
             p.write_text(text, encoding="utf-8")
             parsed = generate_diagram.parse_tickets(p)
         self.assertEqual(parsed[0]["blocked_by"], [])
+        self.assertIsNone(parsed[0]["chunk"])
         self.assertEqual(parsed[1]["blocked_by"], [1])
         self.assertEqual(parsed[1]["part_of"], 1)
+        self.assertEqual(parsed[1]["chunk"], 2)
 
 
 class SplitHeaderTests(unittest.TestCase):

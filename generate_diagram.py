@@ -61,6 +61,9 @@ def parse_tickets(path: Path) -> list[dict]:
         part_of_raw = data.get("part_of", "").strip()
         part_of = int(part_of_raw) if part_of_raw else None
 
+        chunk_raw = data.get("chunk", "").strip()
+        chunk = int(chunk_raw) if chunk_raw else None
+
         tickets.append(
             {
                 "number": number,
@@ -68,6 +71,7 @@ def parse_tickets(path: Path) -> list[dict]:
                 "status": status,
                 "blocked_by": blocked_by,
                 "part_of": part_of,
+                "chunk": chunk,
             }
         )
 
@@ -75,7 +79,14 @@ def parse_tickets(path: Path) -> list[dict]:
     return tickets
 
 
-def compute_layers(tickets: list[dict]) -> dict[int, int]:
+def compute_layers(
+    tickets: list[dict], extra_blocked_by: dict[int, list[int]] | None = None
+) -> dict[int, int]:
+    """Layer = longest blocked_by chain to a ticket with no blockers. `extra_blocked_by`
+    adds synthetic dependencies (e.g. a chunk floor) into the same recursion, so they
+    propagate exactly like a real blocked_by edge — including transitively, to tickets
+    that depend on a ticket carrying an extra dependency of its own."""
+    extra_blocked_by = extra_blocked_by or {}
     by_number = {t["number"]: t for t in tickets}
     layer_cache: dict[int, int] = {}
 
@@ -86,7 +97,7 @@ def compute_layers(tickets: list[dict]) -> dict[int, int]:
             # Cyklus v datech (nemel by nastat) — radeji nespadnout.
             return 0
         stack = stack | {number}
-        blockers = by_number.get(number, {}).get("blocked_by", [])
+        blockers = by_number.get(number, {}).get("blocked_by", []) + extra_blocked_by.get(number, [])
         if not blockers:
             result = 0
         else:
@@ -99,30 +110,44 @@ def compute_layers(tickets: list[dict]) -> dict[int, int]:
     return {t["number"]: layer_of(t["number"], set()) for t in tickets}
 
 
-def effective_layers(
-    tickets: list[dict], computed: dict[int, int], diagram_state: dict
-) -> tuple[dict[int, int], dict[int, bool]]:
-    """Applies manual_layer overrides from diagram-state.json over computed layers.
+def effective_layers_and_dividers(tickets: list[dict]) -> tuple[dict[int, int], list[dict]]:
+    """Derives each ticket's effective layer from its `blocked_by` chain plus a
+    floor implied by its `Chunk #N` label, and the phase dividers that floor
+    implies.
 
-    Returns (effective_layer_by_number, is_stale_by_number). A ticket is "stale"
-    when it has a manual override that no longer matches the freshly computed
-    layer (e.g. after a blocked_by edit) — it still renders at its manual layer,
-    just flagged.
+    A ticket with chunk N is fed into `compute_layers` as if it were also
+    `blocked_by` every ticket in every lower-numbered chunk that has tickets —
+    a real edge in the same recursion, not a separate pass over already-computed
+    values. That's what makes the push transitive: a plain ticket (no chunk of
+    its own) that's `blocked_by` a chunk-pushed ticket picks up the push
+    automatically, the same way it would pick up any other blocker's layer.
+    Chunks with no tickets are skipped automatically (only chunk numbers that
+    have tickets are iterated), so gaps in the numbering don't break the chain.
+
+    Returns (effective_layer_by_number, dividers), where each divider is
+    {"label": "Chunk #N", "after_layer": <column index>} — the column after
+    which its line should render, i.e. the rightmost column of that chunk.
     """
-    overrides = diagram_state.get("tickets", {})
-    effective: dict[int, int] = {}
-    stale: dict[int, bool] = {}
+    by_chunk: dict[int, list[int]] = {}
     for t in tickets:
-        number = t["number"]
-        entry = overrides.get(str(number))
-        manual = entry.get("manual_layer") if entry else None
-        if manual is not None:
-            effective[number] = manual
-            stale[number] = manual != computed[number]
-        else:
-            effective[number] = computed[number]
-            stale[number] = False
-    return effective, stale
+        if t.get("chunk") is not None:
+            by_chunk.setdefault(t["chunk"], []).append(t["number"])
+
+    synthetic_blockers: dict[int, list[int]] = {}
+    lower_chunks_union: list[int] = []
+    for chunk in sorted(by_chunk):
+        for number in by_chunk[chunk]:
+            synthetic_blockers[number] = lower_chunks_union
+        lower_chunks_union = lower_chunks_union + by_chunk[chunk]
+
+    effective = compute_layers(tickets, synthetic_blockers)
+
+    dividers = [
+        {"label": f"Chunk #{chunk}", "after_layer": max(effective[n] for n in by_chunk[chunk])}
+        for chunk in sorted(by_chunk)
+    ]
+
+    return effective, dividers
 
 
 def ticket_state(ticket: dict, by_number: dict[int, dict]) -> str:
@@ -144,8 +169,6 @@ def render_card(
     ticket: dict,
     state: str,
     by_number: dict[int, dict],
-    computed_layer: int,
-    is_stale: bool,
     is_new: bool = False,
 ) -> str:
     icon = ICON_DONE if state == "done" else ICON_OPEN
@@ -177,13 +200,8 @@ def render_card(
 
     blocked_by_attr = ",".join(str(b) for b in blockers)
 
-    stale_cls = " stale-override" if is_stale else ""
-    stale_title = (
-        f' title="Vypočtená vrstva: Krok {computed_layer + 1}"' if is_stale else ""
-    )
-
     return f"""
-      <article class="card {state}{stale_cls}" draggable="true" data-ticket="{number}" data-blocked-by="{blocked_by_attr}"{stale_title}>
+      <article class="card {state}" data-ticket="{number}" data-blocked-by="{blocked_by_attr}">
         <div class="card-top">
           <button type="button" class="status-icon" data-toggle-status="{number}" title="Přepnout stav">{icon}</button>
           <span class="num">#{number}</span>
@@ -197,11 +215,10 @@ def render_card(
 
 
 def render_divider(divider: dict) -> str:
-    divider_id = html.escape(str(divider["id"]))
     label = html.escape(divider.get("label", ""))
     return f"""
-      <div class="divider" draggable="true" data-divider-id="{divider_id}">
-        <div class="divider-label" contenteditable="true" spellcheck="false" data-divider-id="{divider_id}" data-placeholder="nová fáze">{label}</div>
+      <div class="divider">
+        <div class="divider-label">{label}</div>
         <div class="divider-line"></div>
       </div>
     """
@@ -210,20 +227,16 @@ def render_divider(divider: dict) -> str:
 def build_html(
     tickets: list[dict],
     header_extra: str = "",
-    diagram_state: dict | None = None,
     new_tickets: set[int] | None = None,
     repo_short_name: str = "DigiLearn",
 ) -> str:
-    if diagram_state is None:
-        diagram_state = {"tickets": {}, "phase_dividers": []}
     if new_tickets is None:
         new_tickets = set()
 
     by_number = {t["number"]: t for t in tickets}
-    computed = compute_layers(tickets)
-    layers, stale = effective_layers(tickets, computed, diagram_state)
+    layers, dividers = effective_layers_and_dividers(tickets)
 
-    max_layer = max(max(layers.values()), max(computed.values())) if layers else 0
+    max_layer = max(layers.values()) if layers else 0
     columns: list[list[dict]] = [[] for _ in range(max_layer + 1)]
     for t in tickets:
         columns[layers[t["number"]]].append(t)
@@ -235,10 +248,8 @@ def build_html(
     pct = round(100 * done_count / total) if total else 0
 
     dividers_by_column: dict[int, list[dict]] = {}
-    for d in diagram_state.get("phase_dividers", []):
-        col_idx = layers.get(d.get("after_ticket"))
-        if col_idx is not None:
-            dividers_by_column.setdefault(col_idx, []).append(d)
+    for d in dividers:
+        dividers_by_column.setdefault(d["after_layer"], []).append(d)
 
     columns_html = []
     for i, col in enumerate(columns):
@@ -247,8 +258,6 @@ def build_html(
                 t,
                 ticket_state(t, by_number),
                 by_number,
-                computed[t["number"]],
-                stale[t["number"]],
                 t["number"] in new_tickets,
             )
             for t in col
@@ -472,17 +481,6 @@ def build_html(
   .card.ready {{ border-left-color: var(--accent); }}
   .card.blocked {{ border-left-color: var(--border); }}
   .card.dim {{ opacity: 0.25; }}
-  .card.stale-override {{
-    border-style: dashed;
-    border-color: var(--amber);
-  }}
-  .card[draggable="true"] {{ cursor: grab; }}
-  .card.dragging {{ opacity: 0.4; }}
-  .column-cards.drag-over {{
-    outline: 2px dashed var(--accent);
-    outline-offset: 4px;
-    border-radius: 8px;
-  }}
   .card-top {{
     display: flex;
     align-items: center;
@@ -560,48 +558,15 @@ def build_html(
     font-size: 11px;
     font-weight: 600;
     color: var(--muted);
-    cursor: text;
     padding: 1px 4px;
     border-radius: 4px;
     min-width: 10px;
-  }}
-  .divider-label:focus {{
-    outline: 1px solid var(--accent);
-    background: var(--panel);
-  }}
-  .divider-label:empty:before {{
-    content: attr(data-placeholder);
-    color: var(--muted);
-    opacity: 0.6;
   }}
   .divider-line {{
     flex: 1;
     width: 2px;
     margin-top: 20px;
     background: repeating-linear-gradient(to bottom, var(--accent) 0 6px, transparent 6px 12px);
-  }}
-  .divider[draggable="true"] .divider-line {{ cursor: grab; }}
-  .card.divider-drop-target {{
-    outline: 2px dashed var(--accent);
-    outline-offset: 2px;
-  }}
-  .divider-handle {{
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--muted);
-    background: var(--panel);
-    cursor: grab;
-  }}
-  .divider-handle svg {{ width: 16px; height: 16px; pointer-events: none; }}
-  .divider-handle.trash-mode {{
-    color: var(--amber);
-    border-color: var(--amber);
-    background: var(--amber-bg);
   }}
   footer {{
     max-width: 1400px;
@@ -619,9 +584,6 @@ def build_html(
   <div class="progress-row">
     <div class="progress-track"><div class="progress-fill" style="width:{pct}%"></div></div>
     <div class="progress-text">{done_count} / {total} hotovo ({pct}%)</div>
-    <div class="divider-handle" id="divider-handle" draggable="true" title="Přetáhni na ticket pro novou fázovou čáru">
-      <svg viewBox="0 0 20 20"><path d="M10 2v16M6 6l-4 4 4 4M14 6l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
   </div>
   <div class="legend">
     <span>{ICON_OPEN} otevřený</span>
@@ -702,17 +664,6 @@ def build_html(
     }});
   }});
 
-  cards.forEach(card => {{
-    card.addEventListener('dragstart', (e) => {{
-      card.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', card.dataset.ticket);
-      e.dataTransfer.effectAllowed = 'move';
-    }});
-    card.addEventListener('dragend', () => {{
-      card.classList.remove('dragging');
-    }});
-  }});
-
   document.querySelectorAll('[data-toggle-status]').forEach(btn => {{
     btn.addEventListener('click', async (e) => {{
       e.preventDefault();
@@ -732,150 +683,6 @@ def build_html(
     }});
   }});
 
-  document.querySelectorAll('.column-cards').forEach(zone => {{
-    zone.addEventListener('dragover', (e) => {{
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      zone.classList.add('drag-over');
-    }});
-    zone.addEventListener('dragleave', () => {{
-      zone.classList.remove('drag-over');
-    }});
-    zone.addEventListener('drop', async (e) => {{
-      e.preventDefault();
-      zone.classList.remove('drag-over');
-      const ticket = e.dataTransfer.getData('text/plain');
-      const layer = Number(zone.closest('.column').dataset.layer);
-      if (!ticket) return;
-      const res = await fetch('/api/ticket-layer', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ ticket: Number(ticket), layer }}),
-      }});
-      if (res.ok) {{
-        window.location.reload();
-      }} else {{
-        const body = await res.json().catch(() => ({{}}));
-        alert(body.error || 'Nepodařilo se uložit přesun.');
-      }}
-    }});
-  }});
-
-  // --- Phase dividers ---
-  const DIVIDER_CREATE = 'application/x-divider-create';
-  const DIVIDER_MOVE = 'application/x-divider-move';
-  const dividerHandle = document.getElementById('divider-handle');
-
-  async function postJson(url, body) {{
-    const res = await fetch(url, {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify(body),
-    }});
-    if (!res.ok) {{
-      const errBody = await res.json().catch(() => ({{}}));
-      alert(errBody.error || 'Operace s fázovou čárou selhala.');
-      return null;
-    }}
-    return res.json();
-  }}
-
-  dividerHandle.addEventListener('dragstart', (e) => {{
-    e.dataTransfer.setData(DIVIDER_CREATE, '1');
-    e.dataTransfer.effectAllowed = 'copyMove';
-  }});
-
-  dividerHandle.addEventListener('dragover', (e) => {{
-    if (!e.dataTransfer.types.includes(DIVIDER_MOVE)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    dividerHandle.classList.add('trash-mode');
-  }});
-  dividerHandle.addEventListener('dragleave', () => {{
-    dividerHandle.classList.remove('trash-mode');
-  }});
-  dividerHandle.addEventListener('drop', async (e) => {{
-    if (!e.dataTransfer.types.includes(DIVIDER_MOVE)) return;
-    e.preventDefault();
-    dividerHandle.classList.remove('trash-mode');
-    const id = e.dataTransfer.getData(DIVIDER_MOVE);
-    if (!id) return;
-    const result = await postJson('/api/phase-divider/delete', {{ id }});
-    if (result) window.location.reload();
-  }});
-
-  document.querySelectorAll('.divider').forEach(div => {{
-    div.addEventListener('dragstart', (e) => {{
-      e.dataTransfer.setData(DIVIDER_MOVE, div.dataset.dividerId);
-      e.dataTransfer.effectAllowed = 'move';
-    }});
-  }});
-
-  document.querySelectorAll('.divider-label').forEach(label => {{
-    label.addEventListener('click', (e) => {{
-      e.stopPropagation();
-    }});
-    label.addEventListener('blur', async () => {{
-      const id = label.dataset.dividerId;
-      await postJson('/api/phase-divider/label', {{ id, label: label.textContent.trim() }});
-    }});
-    label.addEventListener('keydown', (e) => {{
-      if (e.key === 'Enter') {{
-        e.preventDefault();
-        label.blur();
-      }}
-    }});
-  }});
-
-  cards.forEach(card => {{
-    card.addEventListener('dragover', (e) => {{
-      if (!e.dataTransfer.types.includes(DIVIDER_CREATE) && !e.dataTransfer.types.includes(DIVIDER_MOVE)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = e.dataTransfer.types.includes(DIVIDER_CREATE) ? 'copy' : 'move';
-      card.classList.add('divider-drop-target');
-    }});
-    card.addEventListener('dragleave', () => {{
-      card.classList.remove('divider-drop-target');
-    }});
-    card.addEventListener('drop', async (e) => {{
-      const isCreate = e.dataTransfer.types.includes(DIVIDER_CREATE);
-      const isMove = e.dataTransfer.types.includes(DIVIDER_MOVE);
-      if (!isCreate && !isMove) return;
-      e.preventDefault();
-      e.stopPropagation();
-      card.classList.remove('divider-drop-target');
-      const afterTicket = Number(card.dataset.ticket);
-      if (isCreate) {{
-        const divider = await postJson('/api/phase-divider', {{ after_ticket: afterTicket }});
-        if (divider) {{
-          const url = new URL(window.location.href);
-          url.searchParams.set('edit-divider', divider.id);
-          window.location.href = url.toString();
-        }}
-      }} else {{
-        const id = e.dataTransfer.getData(DIVIDER_MOVE);
-        const result = await postJson('/api/phase-divider/move', {{ id, after_ticket: afterTicket }});
-        if (result) window.location.reload();
-      }}
-    }});
-  }});
-
-  const editDividerId = new URL(window.location.href).searchParams.get('edit-divider');
-  if (editDividerId) {{
-    const label = document.querySelector(`.divider-label[data-divider-id="${{editDividerId}}"]`);
-    if (label) {{
-      label.focus();
-      const range = document.createRange();
-      range.selectNodeContents(label);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }}
-    const url = new URL(window.location.href);
-    url.searchParams.delete('edit-divider');
-    window.history.replaceState({{}}, '', url.toString());
-  }}
 </script>
 </body>
 </html>

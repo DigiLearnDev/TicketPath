@@ -1,14 +1,13 @@
 """Sprava vice repo namespace: aktivni repo, znama repa a jejich soubory.
 
-Kazde repo ma vlastni adresar v data/<owner>__<repo>/ s tickets.txt a
-diagram-state.json. Volba aktivniho repa a seznam znamych repo ziji v
-app-state.json v korenu (napric repo, nikoli namespaceovane).
+Kazde repo ma vlastni adresar v data/<owner>__<repo>/ s tickets.txt.
+Volba aktivniho repa a seznam znamych repo ziji v app-state.json
+v korenu (napric repo, nikoli namespaceovane).
 """
 from __future__ import annotations
 
 import json
 import re
-import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -18,8 +17,6 @@ LEGACY_TICKETS_FILE = HERE / "tickets.txt"
 DEFAULT_REPO = "DigiLearnDev/DigiLearn"
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-
-EMPTY_STATE = {"tickets": {}, "phase_dividers": []}
 
 
 def is_valid_repo(name: str) -> bool:
@@ -45,19 +42,12 @@ def tickets_path(repo: str) -> Path:
     return repo_dir(repo) / "tickets.txt"
 
 
-def diagram_state_path(repo: str) -> Path:
-    return repo_dir(repo) / "diagram-state.json"
-
-
 def ensure_repo_files(repo: str) -> None:
     d = repo_dir(repo)
     d.mkdir(parents=True, exist_ok=True)
     tf = tickets_path(repo)
     if not tf.exists():
         tf.write_text("", encoding="utf-8")
-    sf = diagram_state_path(repo)
-    if not sf.exists():
-        sf.write_text(json.dumps(EMPTY_STATE, indent=2), encoding="utf-8")
 
 
 def _migrate_legacy_tickets() -> None:
@@ -92,27 +82,6 @@ def save_app_state(state: dict) -> None:
     )
 
 
-def load_diagram_state(repo: str) -> dict:
-    ensure_repo_files(repo)
-    return json.loads(diagram_state_path(repo).read_text(encoding="utf-8"))
-
-
-def save_diagram_state(repo: str, state: dict) -> None:
-    diagram_state_path(repo).write_text(
-        json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-
-
-def set_manual_layer(repo: str, ticket_number: int, layer: int) -> dict:
-    state = load_diagram_state(repo)
-    state.setdefault("tickets", {})
-    key = str(ticket_number)
-    entry = state["tickets"].setdefault(key, {"manual_layer": None, "status_override": None})
-    entry["manual_layer"] = layer
-    save_diagram_state(repo, state)
-    return state
-
-
 TICKET_BLOCK_RE = re.compile(
     r"(^ticket:\s*(\d+)\s*$.*?^status:\s*)(\S+)(\s*$)",
     re.MULTILINE | re.DOTALL,
@@ -145,47 +114,6 @@ def toggle_ticket_status(repo: str, ticket_number: int) -> str:
 
     path.write_text(new_text, encoding="utf-8")
     return new_status_holder[0]
-
-
-def _find_divider(dividers: list[dict], divider_id: str) -> dict:
-    for d in dividers:
-        if d["id"] == divider_id:
-            return d
-    raise ValueError(f"phase divider {divider_id} not found")
-
-
-def add_phase_divider(repo: str, after_ticket: int, label: str = "") -> dict:
-    state = load_diagram_state(repo)
-    state.setdefault("phase_dividers", [])
-    divider = {"id": uuid.uuid4().hex, "label": label, "after_ticket": after_ticket}
-    state["phase_dividers"].append(divider)
-    save_diagram_state(repo, state)
-    return divider
-
-
-def move_phase_divider(repo: str, divider_id: str, after_ticket: int) -> dict:
-    state = load_diagram_state(repo)
-    divider = _find_divider(state.get("phase_dividers", []), divider_id)
-    divider["after_ticket"] = after_ticket
-    save_diagram_state(repo, state)
-    return divider
-
-
-def relabel_phase_divider(repo: str, divider_id: str, label: str) -> dict:
-    state = load_diagram_state(repo)
-    divider = _find_divider(state.get("phase_dividers", []), divider_id)
-    divider["label"] = label
-    save_diagram_state(repo, state)
-    return divider
-
-
-def delete_phase_divider(repo: str, divider_id: str) -> dict:
-    state = load_diagram_state(repo)
-    dividers = state.get("phase_dividers", [])
-    _find_divider(dividers, divider_id)
-    state["phase_dividers"] = [d for d in dividers if d["id"] != divider_id]
-    save_diagram_state(repo, state)
-    return state
 
 
 def switch_active_repo(state: dict, repo: str) -> dict:

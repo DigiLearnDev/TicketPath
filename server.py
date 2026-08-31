@@ -109,13 +109,11 @@ class DiagramHandler(BaseHTTPRequestHandler):
 
         state = repo_store.load_app_state()
         tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
-        diagram_state = repo_store.load_diagram_state(state["active_repo"])
         header_extra = render_repo_switcher(state) + render_refresh_button()
         new_tickets = _new_tickets_by_repo.get(state["active_repo"], set())
         body = build_html(
             tickets,
             header_extra=header_extra,
-            diagram_state=diagram_state,
             new_tickets=new_tickets,
             repo_short_name=repo_store.repo_short_name(state["active_repo"]),
         ).encode("utf-8")
@@ -129,26 +127,11 @@ class DiagramHandler(BaseHTTPRequestHandler):
         if self.path == "/api/repos":
             self._handle_switch_repo()
             return
-        if self.path == "/api/ticket-layer":
-            self._handle_set_ticket_layer()
-            return
         if self.path == "/api/ticket-status":
             self._handle_toggle_ticket_status()
             return
         if self.path == "/api/refresh":
             self._handle_refresh()
-            return
-        if self.path == "/api/phase-divider":
-            self._handle_create_divider()
-            return
-        if self.path == "/api/phase-divider/move":
-            self._handle_move_divider()
-            return
-        if self.path == "/api/phase-divider/label":
-            self._handle_label_divider()
-            return
-        if self.path == "/api/phase-divider/delete":
-            self._handle_delete_divider()
             return
         self._send_json(404, {"error": "not found"})
 
@@ -174,26 +157,6 @@ class DiagramHandler(BaseHTTPRequestHandler):
         state = repo_store.load_app_state()
         state = repo_store.switch_active_repo(state, repo)
         self._send_json(200, state)
-
-    def _handle_set_ticket_layer(self) -> None:
-        payload = self._read_json_body()
-        if payload is None:
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        try:
-            ticket = int(payload.get("ticket"))
-            layer = int(payload.get("layer"))
-        except (TypeError, ValueError):
-            self._send_json(400, {"error": "ticket and layer must be integers"})
-            return
-        if layer < 0:
-            self._send_json(400, {"error": "layer must be >= 0"})
-            return
-
-        state = repo_store.load_app_state()
-        diagram_state = repo_store.set_manual_layer(state["active_repo"], ticket, layer)
-        self._send_json(200, diagram_state)
 
     def _handle_toggle_ticket_status(self) -> None:
         payload = self._read_json_body()
@@ -225,85 +188,6 @@ class DiagramHandler(BaseHTTPRequestHandler):
             return
         _new_tickets_by_repo[repo] = new_numbers
         self._send_json(200, {"ticket_count": len(tickets), "new_tickets": sorted(new_numbers)})
-
-    def _handle_create_divider(self) -> None:
-        payload = self._read_json_body()
-        if payload is None:
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        try:
-            after_ticket = int(payload.get("after_ticket"))
-        except (TypeError, ValueError):
-            self._send_json(400, {"error": "after_ticket must be an integer"})
-            return
-
-        state = repo_store.load_app_state()
-        divider = repo_store.add_phase_divider(state["active_repo"], after_ticket)
-        self._send_json(200, divider)
-
-    def _handle_move_divider(self) -> None:
-        payload = self._read_json_body()
-        if payload is None:
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        divider_id = str(payload.get("id", "")).strip()
-        try:
-            after_ticket = int(payload.get("after_ticket"))
-        except (TypeError, ValueError):
-            self._send_json(400, {"error": "after_ticket must be an integer"})
-            return
-        if not divider_id:
-            self._send_json(400, {"error": "id is required"})
-            return
-
-        state = repo_store.load_app_state()
-        try:
-            divider = repo_store.move_phase_divider(state["active_repo"], divider_id, after_ticket)
-        except ValueError as exc:
-            self._send_json(404, {"error": str(exc)})
-            return
-        self._send_json(200, divider)
-
-    def _handle_label_divider(self) -> None:
-        payload = self._read_json_body()
-        if payload is None:
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        divider_id = str(payload.get("id", "")).strip()
-        label = str(payload.get("label", ""))
-        if not divider_id:
-            self._send_json(400, {"error": "id is required"})
-            return
-
-        state = repo_store.load_app_state()
-        try:
-            divider = repo_store.relabel_phase_divider(state["active_repo"], divider_id, label)
-        except ValueError as exc:
-            self._send_json(404, {"error": str(exc)})
-            return
-        self._send_json(200, divider)
-
-    def _handle_delete_divider(self) -> None:
-        payload = self._read_json_body()
-        if payload is None:
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        divider_id = str(payload.get("id", "")).strip()
-        if not divider_id:
-            self._send_json(400, {"error": "id is required"})
-            return
-
-        state = repo_store.load_app_state()
-        try:
-            diagram_state = repo_store.delete_phase_divider(state["active_repo"], divider_id)
-        except ValueError as exc:
-            self._send_json(404, {"error": str(exc)})
-            return
-        self._send_json(200, diagram_state)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
