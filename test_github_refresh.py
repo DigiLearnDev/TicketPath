@@ -1,6 +1,10 @@
 """Unit tests for github_refresh: body parsing, issue->ticket mapping, file rendering."""
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -187,6 +191,52 @@ class FetchAllIssuesTests(unittest.TestCase):
         issues = gr.fetch_all_issues("owner/repo")
         self.assertEqual([i["number"] for i in issues], [1, 2])
         self.assertEqual(mock_run.call_count, 2)
+
+class FetchAllIssuesDecodingTests(unittest.TestCase):
+    """Regression: gh emits UTF-8, so fetch_all_issues must decode as UTF-8 regardless
+    of the machine's locale. With text=True, a cp1250 Windows box killed subprocess's
+    reader thread on an accented issue title and left result.stdout as None, which
+    surfaced as "the JSON object must be str, bytes or bytearray, not NoneType".
+
+    Mocking subprocess.run cannot catch this — the decode happens inside it — so this
+    test runs a real child process that prints UTF-8 and forwards the real kwargs.
+    """
+
+    def test_utf8_issue_titles_survive_a_non_utf8_locale(self):
+        payload = json.dumps(
+            {
+                "data": {
+                    "repository": {
+                        "issues": {
+                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                            "nodes": [
+                                {
+                                    "number": 1,
+                                    "title": "Přidat příšerně dlouhý název — ěščřžýáíé",
+                                    "state": "OPEN",
+                                    "body": "",
+                                    "subIssues": {"nodes": []},
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+            ensure_ascii=False,
+        )
+        child = (
+            "import sys;"
+            "sys.stdout.buffer.write(sys.argv[1].encode('utf-8'))"
+        )
+        real_run = subprocess.run
+
+        def fake_gh(args, **kwargs):
+            return real_run([sys.executable, "-c", child, payload], **kwargs)
+
+        with patch("github_refresh.subprocess.run", fake_gh),                 patch.dict(os.environ, {"PYTHONIOENCODING": "cp1250"}):
+            issues = gr.fetch_all_issues("owner/repo")
+
+        self.assertEqual(issues[0]["title"], "Přidat příšerně dlouhý název — ěščřžýáíé")
 
 
 if __name__ == "__main__":

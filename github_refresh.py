@@ -113,7 +113,12 @@ def fetch_all_issues(repo: str) -> list[dict]:
         ]
         if after:
             args += ["-F", f"after={after}"]
-        result = subprocess.run(args, capture_output=True, text=True, check=True)
+        # encoding="utf-8" explicitly: gh emits UTF-8, but text=True would decode
+        # with the Windows locale (cp1250 here), which kills the reader thread on
+        # accented issue titles and leaves result.stdout as None.
+        result = subprocess.run(
+            args, capture_output=True, check=True, encoding="utf-8", errors="replace"
+        )
         payload = json.loads(result.stdout)
         page = payload["data"]["repository"]["issues"]
         issues.extend(page["nodes"])
