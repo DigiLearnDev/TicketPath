@@ -253,6 +253,9 @@ def build_html(
 
     columns_html = []
     for i, col in enumerate(columns):
+        if i > 0 and not dividers_by_column.get(i - 1):
+            columns_html.append('<div class="step-divider"></div>')
+
         cards_html = "\n".join(
             render_card(
                 t,
@@ -265,7 +268,6 @@ def build_html(
         columns_html.append(
             f"""
         <div class="column" data-layer="{i}">
-          <div class="column-label">Krok {i + 1}</div>
           <div class="column-cards">{cards_html}</div>
         </div>
         """
@@ -450,13 +452,11 @@ def build_html(
     min-width: 260px;
     flex-shrink: 0;
   }}
-  .column-label {{
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-    margin-bottom: 12px;
+  .step-divider {{
+    align-self: stretch;
+    width: 1px;
+    flex-shrink: 0;
+    background: var(--border);
   }}
   .column-cards {{
     display: flex;
