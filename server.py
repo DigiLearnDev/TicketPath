@@ -17,7 +17,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import github_refresh
 import repo_store
-from generate_diagram import build_html, parse_tickets
+import ticket_store
+from generate_diagram import build_html
 
 HOST = "localhost"
 PORT = 8765
@@ -109,7 +110,7 @@ class DiagramHandler(BaseHTTPRequestHandler):
             return
 
         state = repo_store.load_app_state()
-        tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
+        tickets = ticket_store.load_tickets(repo_store.tickets_path(state["active_repo"]))
         header_extra = render_repo_switcher(state) + render_refresh_button()
         new_tickets = _new_tickets_by_repo.get(state["active_repo"], set())
         body = build_html(

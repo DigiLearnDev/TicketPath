@@ -98,35 +98,6 @@ def diff_new_tickets(old_numbers: set[int], new_numbers: set[int]) -> set[int]:
     return new_numbers - old_numbers
 
 
-def split_header(text: str) -> str:
-    """Everything before the first 'ticket:' block line — preserved verbatim on refresh."""
-    match = re.search(r"^ticket:\s*\d+\s*$", text, re.MULTILINE)
-    if not match:
-        return text
-    return text[: match.start()]
-
-
-def render_tickets_file(header: str, tickets: list[Ticket]) -> str:
-    blocks = []
-    for t in tickets:
-        blocked_by = ",".join(str(b) for b in t.blocked_by) if t.blocked_by else "none"
-        lines = [
-            f"ticket: {t.number}",
-            f"title: {t.title}",
-            f"status: {t.status}",
-            f"blocked_by: {blocked_by}",
-        ]
-        if t.part_of is not None:
-            lines.append(f"part_of: {t.part_of}")
-        if t.chunk is not None:
-            lines.append(f"chunk: {t.chunk}")
-        if t.sub_progress is not None:
-            done, total = t.sub_progress
-            lines.append(f"sub_progress: {done}/{total}")
-        blocks.append("\n".join(lines) + "\n")
-    return header + "\n".join(blocks)
-
-
 def fetch_all_issues(repo: str) -> list[dict]:
     owner, _, name = repo.partition("/")
     issues: list[dict] = []
@@ -163,19 +134,19 @@ def refresh_repo(repo: str) -> tuple[list[Ticket], set[int]]:
     (in-memory, per the spec) and disappears on the next refresh with no
     persisted dismiss state.
     """
-    import generate_diagram
     import repo_store
+    import ticket_store
 
     path = repo_store.tickets_path(repo)
     old_text = path.read_text(encoding="utf-8") if path.exists() else ""
-    old_tickets = generate_diagram.parse_tickets(path) if path.exists() else []
+    old_tickets = ticket_store.parse_tickets(old_text) if old_text else []
     old_numbers = {t.number for t in old_tickets}
 
     raw_issues = fetch_all_issues(repo)
     tickets = build_tickets_from_issues(raw_issues)
     new_numbers = diff_new_tickets(old_numbers, {t.number for t in tickets})
 
-    header = split_header(old_text)
-    path.write_text(render_tickets_file(header, tickets), encoding="utf-8")
+    header = ticket_store.split_header(old_text)
+    ticket_store.save_tickets(path, tickets, header)
 
     return tickets, new_numbers

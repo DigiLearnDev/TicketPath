@@ -15,77 +15,11 @@ from datetime import datetime
 from pathlib import Path
 
 import repo_store
+import ticket_store
 from ticket import Ticket
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_FILE = HERE / "diagram.html"
-
-
-def parse_tickets(path: Path) -> list[Ticket]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-
-    blocks: list[list[str]] = []
-    current: list[str] = []
-    for raw in lines:
-        stripped = raw.strip()
-        if stripped.startswith("#"):
-            continue
-        if stripped == "":
-            if current:
-                blocks.append(current)
-                current = []
-            continue
-        current.append(stripped)
-    if current:
-        blocks.append(current)
-
-    tickets = []
-    for block in blocks:
-        data: dict[str, str] = {}
-        for line in block:
-            if ":" not in line:
-                continue
-            key, _, value = line.partition(":")
-            data[key.strip()] = value.strip()
-        if "ticket" not in data:
-            continue
-
-        number = int(data["ticket"])
-        title = data.get("title", f"#{number}")
-        status = data.get("status", "open").strip().lower()
-        blocked_raw = data.get("blocked_by", "none").strip().lower()
-        if blocked_raw in ("none", ""):
-            blocked_by: list[int] = []
-        else:
-            blocked_by = [int(x.strip()) for x in blocked_raw.split(",") if x.strip()]
-
-        part_of_raw = data.get("part_of", "").strip()
-        part_of = int(part_of_raw) if part_of_raw else None
-
-        chunk_raw = data.get("chunk", "").strip()
-        chunk = int(chunk_raw) if chunk_raw else None
-
-        sub_progress_raw = data.get("sub_progress", "").strip()
-        if sub_progress_raw and "/" in sub_progress_raw:
-            done_str, _, total_str = sub_progress_raw.partition("/")
-            sub_progress = (int(done_str.strip()), int(total_str.strip()))
-        else:
-            sub_progress = None
-
-        tickets.append(
-            Ticket(
-                number=number,
-                title=title,
-                status=status,
-                blocked_by=blocked_by,
-                part_of=part_of,
-                chunk=chunk,
-                sub_progress=sub_progress,
-            )
-        )
-
-    tickets.sort(key=lambda t: t.number)
-    return tickets
 
 
 def compute_layers(
@@ -750,7 +684,7 @@ def build_html(
 
 def main() -> None:
     state = repo_store.load_app_state()
-    tickets = parse_tickets(repo_store.tickets_path(state["active_repo"]))
+    tickets = ticket_store.load_tickets(repo_store.tickets_path(state["active_repo"]))
     output = build_html(tickets, repo_short_name=repo_store.repo_short_name(state["active_repo"]))
     OUTPUT_FILE.write_text(output, encoding="utf-8")
     print(f"Vygenerovano: {OUTPUT_FILE}")

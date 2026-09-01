@@ -82,38 +82,12 @@ def save_app_state(state: dict) -> None:
     )
 
 
-TICKET_BLOCK_RE = re.compile(
-    r"(^ticket:\s*(\d+)\s*$.*?^status:\s*)(\S+)(\s*$)",
-    re.MULTILINE | re.DOTALL,
-)
-
-
 def toggle_ticket_status(repo: str, ticket_number: int) -> str:
-    """Flips a ticket's status: line directly in tickets.txt and returns the new status.
+    """Flips a ticket's status and returns the new status. Delegates the
+    tickets.txt format entirely to ticket_store."""
+    import ticket_store
 
-    This is a stand-in value until the next GitHub refresh overwrites it with the
-    real state of the issue — not a separate override layer.
-    """
-    path = tickets_path(repo)
-    text = path.read_text(encoding="utf-8")
-
-    new_status_holder: list[str] = []
-
-    def _flip(match: re.Match) -> str:
-        if int(match.group(2)) != ticket_number:
-            return match.group(0)
-        current = match.group(3).strip().lower()
-        new_status = "open" if current == "closed" else "closed"
-        new_status_holder.append(new_status)
-        return f"{match.group(1)}{new_status}{match.group(4)}"
-
-    new_text = TICKET_BLOCK_RE.sub(_flip, text)
-
-    if not new_status_holder:
-        raise ValueError(f"ticket {ticket_number} not found in {path}")
-
-    path.write_text(new_text, encoding="utf-8")
-    return new_status_holder[0]
+    return ticket_store.toggle_status(tickets_path(repo), ticket_number)
 
 
 def switch_active_repo(state: dict, repo: str) -> dict:
