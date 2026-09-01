@@ -89,6 +89,7 @@ def render_refresh_button() -> str:
               btn.disabled = false;
               return;
             }
+            sessionStorage.setItem('tt-toast-refreshed', '1');
             window.location.reload();
           } catch (err) {
             status.textContent = 'Aktualizace selhala.';

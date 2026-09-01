@@ -332,6 +332,28 @@ def build_html(
     }}
   }}
   * {{ box-sizing: border-box; }}
+  .toast {{
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translate(-50%, 12px);
+    background: var(--text);
+    color: var(--bg);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1000;
+    max-width: 80vw;
+    text-align: center;
+  }}
+  .toast.visible {{
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }}
   html, body {{
     height: 100%;
     overflow: hidden;
@@ -620,6 +642,8 @@ def build_html(
   Spusť Aktualizovat-diagram.bat po úpravě tickets.txt pro obnovu.
 </footer>
 
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
 <script>
   const diagramWrap = document.querySelector('.diagram-wrap');
   diagramWrap.addEventListener('wheel', (e) => {{
@@ -659,9 +683,25 @@ def build_html(
   const cards = Array.from(document.querySelectorAll('.card'));
   const repoShortName = {json.dumps(repo_short_name)};
 
+  const toastEl = document.getElementById('toast');
+  let toastTimer = null;
+  function showToast(text) {{
+    if (toastTimer) clearTimeout(toastTimer);
+    toastEl.textContent = text;
+    toastEl.classList.add('visible');
+    toastTimer = setTimeout(() => toastEl.classList.remove('visible'), 2500);
+  }}
+
+  if (sessionStorage.getItem('tt-toast-refreshed')) {{
+    sessionStorage.removeItem('tt-toast-refreshed');
+    showToast('Aktualizováno');
+  }}
+
   cards.forEach(card => {{
     card.addEventListener('dblclick', () => {{
-      navigator.clipboard.writeText(`${{repoShortName}} ticket #${{card.dataset.ticket}}`);
+      const copied = `${{repoShortName}} ticket #${{card.dataset.ticket}}`;
+      navigator.clipboard.writeText(copied);
+      showToast(`Zkopírováno: ${{copied}}`);
     }});
   }});
 
