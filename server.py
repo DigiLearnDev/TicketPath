@@ -11,7 +11,6 @@ necte ani neprepisuje data jineho repa.
 """
 from __future__ import annotations
 
-import html
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -29,79 +28,6 @@ PORT = 8765
 _new_tickets_by_repo: dict[str, set[int]] = {}
 
 
-def render_repo_switcher(state: dict) -> str:
-    options = "\n".join(
-        f'<option value="{html.escape(repo)}"{" selected" if repo == state["active_repo"] else ""}>{html.escape(repo)}</option>'
-        for repo in state["known_repos"]
-    )
-    return f"""
-    <div class="repo-switcher">
-      <label for="repo-select">Repo</label>
-      <select id="repo-select">{options}</select>
-      <button type="button" id="repo-add-btn" title="Přidat repo (owner/repo)">+ nové repo</button>
-    </div>
-    <script>
-      (function() {{
-        const select = document.getElementById('repo-select');
-        const addBtn = document.getElementById('repo-add-btn');
-
-        async function switchRepo(repo) {{
-          const res = await fetch('/api/repos', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{ repo }}),
-          }});
-          if (!res.ok) {{
-            const body = await res.json().catch(() => ({{}}));
-            alert(body.error || 'Nepodařilo se přepnout repo.');
-            return;
-          }}
-          window.location.reload();
-        }}
-
-        select.addEventListener('change', () => switchRepo(select.value));
-        addBtn.addEventListener('click', () => {{
-          const repo = window.prompt('Nové repo (owner/repo):');
-          if (repo && repo.trim()) switchRepo(repo.trim());
-        }});
-      }})();
-    </script>
-    """
-
-
-def render_refresh_button() -> str:
-    return """
-    <div class="refresh-row">
-      <button type="button" id="refresh-btn">Aktualizovat</button>
-      <span id="refresh-status" class="refresh-status"></span>
-    </div>
-    <script>
-      (function() {
-        const btn = document.getElementById('refresh-btn');
-        const status = document.getElementById('refresh-status');
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          status.textContent = 'Aktualizuji z GitHubu…';
-          try {
-            const res = await fetch('/api/refresh', { method: 'POST' });
-            if (!res.ok) {
-              const body = await res.json().catch(() => ({}));
-              status.textContent = body.error || 'Aktualizace selhala.';
-              btn.disabled = false;
-              return;
-            }
-            sessionStorage.setItem('tt-toast-refreshed', '1');
-            window.location.reload();
-          } catch (err) {
-            status.textContent = 'Aktualizace selhala.';
-            btn.disabled = false;
-          }
-        });
-      })();
-    </script>
-    """
-
-
 class DiagramHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/api/repos":
@@ -111,13 +37,14 @@ class DiagramHandler(BaseHTTPRequestHandler):
 
         state = repo_store.load_app_state()
         tickets = ticket_store.load_tickets(repo_store.tickets_path(state["active_repo"]))
-        header_extra = render_repo_switcher(state) + render_refresh_button()
         new_tickets = _new_tickets_by_repo.get(state["active_repo"], set())
         body = build_html(
             tickets,
-            header_extra=header_extra,
             new_tickets=new_tickets,
             repo_short_name=repo_store.repo_short_name(state["active_repo"]),
+            known_repos=state["known_repos"],
+            active_repo=state["active_repo"],
+            offer_refresh=True,
         ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

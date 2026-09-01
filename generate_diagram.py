@@ -256,6 +256,93 @@ def render_card(card: CardLayout) -> str:
     """
 
 
+def render_repo_switcher(known_repos: list[str], active_repo: str) -> str:
+    options = "\n".join(
+        f'<option value="{html.escape(repo)}"{" selected" if repo == active_repo else ""}>{html.escape(repo)}</option>'
+        for repo in known_repos
+    )
+    return f"""
+    <div class="repo-switcher">
+      <label for="repo-select">Repo</label>
+      <select id="repo-select">{options}</select>
+      <button type="button" id="repo-add-btn" title="Přidat repo (owner/repo)">+ nové repo</button>
+    </div>
+    <script>
+      (function() {{
+        const select = document.getElementById('repo-select');
+        const addBtn = document.getElementById('repo-add-btn');
+
+        async function switchRepo(repo) {{
+          const res = await fetch('/api/repos', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ repo }}),
+          }});
+          if (!res.ok) {{
+            const body = await res.json().catch(() => ({{}}));
+            alert(body.error || 'Nepodařilo se přepnout repo.');
+            return;
+          }}
+          window.location.reload();
+        }}
+
+        select.addEventListener('change', () => switchRepo(select.value));
+        addBtn.addEventListener('click', () => {{
+          const repo = window.prompt('Nové repo (owner/repo):');
+          if (repo && repo.trim()) switchRepo(repo.trim());
+        }});
+      }})();
+    </script>
+    """
+
+
+def render_refresh_button() -> str:
+    return """
+    <div class="refresh-row">
+      <button type="button" id="refresh-btn">Aktualizovat</button>
+      <span id="refresh-status" class="refresh-status"></span>
+    </div>
+    <script>
+      (function() {
+        const btn = document.getElementById('refresh-btn');
+        const status = document.getElementById('refresh-status');
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          status.textContent = 'Aktualizuji z GitHubu…';
+          try {
+            const res = await fetch('/api/refresh', { method: 'POST' });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              status.textContent = body.error || 'Aktualizace selhala.';
+              btn.disabled = false;
+              return;
+            }
+            sessionStorage.setItem('tt-toast-refreshed', '1');
+            window.location.reload();
+          } catch (err) {
+            status.textContent = 'Aktualizace selhala.';
+            btn.disabled = false;
+          }
+        });
+      })();
+    </script>
+    """
+
+
+def render_header(known_repos: list[str] | None, active_repo: str | None, offer_refresh: bool) -> str:
+    """Draws the entire header extras area (repo switcher + refresh button) so
+    that its HTML, CSS classes and scripts live in one module. `known_repos`
+    empty/None skips the switcher; `offer_refresh=False` skips the button —
+    that's how a static, serverless export (generate_diagram.py's own main())
+    renders no header extras at all."""
+    parts = []
+    if known_repos:
+        parts.append(render_repo_switcher(known_repos, active_repo or ""))
+    if offer_refresh:
+        parts.append(render_refresh_button())
+    return "".join(parts)
+
+
 def render_divider(divider: dict) -> str:
     label = html.escape(divider.get("label", ""))
     return f"""
@@ -268,11 +355,14 @@ def render_divider(divider: dict) -> str:
 
 def build_html(
     tickets: list[Ticket],
-    header_extra: str = "",
     new_tickets: set[int] | None = None,
     repo_short_name: str = "DigiLearn",
+    known_repos: list[str] | None = None,
+    active_repo: str | None = None,
+    offer_refresh: bool = False,
 ) -> str:
     layout = compute_diagram_layout(tickets, new_tickets)
+    header_extra = render_header(known_repos, active_repo, offer_refresh)
 
     columns_html = []
     for col in layout.columns:
