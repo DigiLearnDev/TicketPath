@@ -64,6 +64,13 @@ def parse_tickets(path: Path) -> list[dict]:
         chunk_raw = data.get("chunk", "").strip()
         chunk = int(chunk_raw) if chunk_raw else None
 
+        sub_progress_raw = data.get("sub_progress", "").strip()
+        if sub_progress_raw and "/" in sub_progress_raw:
+            done_str, _, total_str = sub_progress_raw.partition("/")
+            sub_progress = (int(done_str.strip()), int(total_str.strip()))
+        else:
+            sub_progress = None
+
         tickets.append(
             {
                 "number": number,
@@ -72,6 +79,7 @@ def parse_tickets(path: Path) -> list[dict]:
                 "blocked_by": blocked_by,
                 "part_of": part_of,
                 "chunk": chunk,
+                "sub_progress": sub_progress,
             }
         )
 
@@ -331,8 +339,7 @@ def build_html(
     flex-direction: column;
   }}
   header {{
-    max-width: 1400px;
-    margin: 0 auto 28px;
+    margin: 0 0 28px;
     width: 100%;
     flex: none;
   }}
@@ -435,9 +442,7 @@ def build_html(
   }}
   .diagram-wrap {{
     position: relative;
-    max-width: 1400px;
     width: 100%;
-    margin: 0 auto;
     overflow-x: auto;
     overflow-y: hidden;
     flex: 1 1 auto;
@@ -569,8 +574,7 @@ def build_html(
     background: repeating-linear-gradient(to bottom, var(--accent) 0 6px, transparent 6px 12px);
   }}
   footer {{
-    max-width: 1400px;
-    margin: 32px auto 0;
+    margin: 32px 0 0;
     font-size: 12px;
     color: var(--muted);
   }}

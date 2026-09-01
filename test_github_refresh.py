@@ -122,6 +122,28 @@ class BuildTicketsFromIssuesTests(unittest.TestCase):
         self.assertEqual(by_number[36]["blocked_by"], [])
         self.assertIsNone(by_number[29]["part_of"])
 
+    def test_sub_progress_counts_done_over_total(self):
+        raw = [
+            {
+                "number": 29,
+                "title": "Parent",
+                "state": "OPEN",
+                "body": "",
+                "subIssues": {"nodes": [{"number": 36, "state": "OPEN"}, {"number": 37, "state": "CLOSED"}]},
+            },
+            {"number": 36, "title": "Child A", "state": "OPEN", "body": "", "subIssues": {"nodes": []}},
+            {"number": 37, "title": "Child B", "state": "CLOSED", "body": "", "subIssues": {"nodes": []}},
+        ]
+        tickets = gr.build_tickets_from_issues(raw)
+        by_number = {t["number"]: t for t in tickets}
+        self.assertEqual(by_number[29]["sub_progress"], (1, 2))
+        self.assertIsNone(by_number[36]["sub_progress"])
+
+    def test_sub_progress_none_when_no_sub_issues(self):
+        raw = [{"number": 1, "title": "First", "state": "OPEN", "body": "", "subIssues": {"nodes": []}}]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertIsNone(tickets[0]["sub_progress"])
+
     def test_sorted_by_number(self):
         raw = [
             {"number": 5, "title": "B", "state": "OPEN", "body": "", "subIssues": {"nodes": []}},
@@ -180,6 +202,22 @@ class RenderTicketsFileTests(unittest.TestCase):
         text = gr.render_tickets_file(header, tickets)
         self.assertNotIn("chunk:", text)
 
+    def test_sub_progress_line_emitted_when_present(self):
+        header = ""
+        tickets = [
+            {"number": 29, "title": "Parent", "status": "open", "blocked_by": [], "part_of": None, "sub_progress": (1, 2)}
+        ]
+        text = gr.render_tickets_file(header, tickets)
+        self.assertIn("sub_progress: 1/2\n", text)
+
+    def test_sub_progress_line_omitted_when_absent(self):
+        header = ""
+        tickets = [
+            {"number": 1, "title": "T", "status": "open", "blocked_by": [], "part_of": None, "sub_progress": None}
+        ]
+        text = gr.render_tickets_file(header, tickets)
+        self.assertNotIn("sub_progress:", text)
+
     def test_round_trip_with_parse_tickets(self):
         import tempfile
         from pathlib import Path
@@ -189,7 +227,7 @@ class RenderTicketsFileTests(unittest.TestCase):
         header = "# header\n\n"
         tickets = [
             {"number": 1, "title": "First", "status": "open", "blocked_by": [], "part_of": None, "chunk": None},
-            {"number": 2, "title": "Second", "status": "closed", "blocked_by": [1], "part_of": 1, "chunk": 2},
+            {"number": 2, "title": "Second", "status": "closed", "blocked_by": [1], "part_of": 1, "chunk": 2, "sub_progress": (3, 5)},
         ]
         text = gr.render_tickets_file(header, tickets)
         with tempfile.TemporaryDirectory() as d:
@@ -198,9 +236,11 @@ class RenderTicketsFileTests(unittest.TestCase):
             parsed = generate_diagram.parse_tickets(p)
         self.assertEqual(parsed[0]["blocked_by"], [])
         self.assertIsNone(parsed[0]["chunk"])
+        self.assertIsNone(parsed[0]["sub_progress"])
         self.assertEqual(parsed[1]["blocked_by"], [1])
         self.assertEqual(parsed[1]["part_of"], 1)
         self.assertEqual(parsed[1]["chunk"], 2)
+        self.assertEqual(parsed[1]["sub_progress"], (3, 5))
 
 
 class SplitHeaderTests(unittest.TestCase):

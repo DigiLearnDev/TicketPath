@@ -60,6 +60,13 @@ def parse_chunk(labels: list[str]) -> int | None:
     return min(numbers) if numbers else None
 
 
+def sub_progress(sub_issues: list[dict]) -> tuple[int, int] | None:
+    if not sub_issues:
+        return None
+    done = sum(1 for sub in sub_issues if sub["state"] == "CLOSED")
+    return (done, len(sub_issues))
+
+
 def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
     part_of: dict[int, int] = {}
     for issue in raw_issues:
@@ -78,6 +85,7 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
                 "blocked_by": parse_blocked_by(issue.get("body")),
                 "part_of": part_of.get(number),
                 "chunk": parse_chunk(label_names),
+                "sub_progress": sub_progress(issue.get("subIssues", {}).get("nodes", [])),
             }
         )
     tickets.sort(key=lambda t: t["number"])
@@ -110,6 +118,9 @@ def render_tickets_file(header: str, tickets: list[dict]) -> str:
             lines.append(f"part_of: {t['part_of']}")
         if t.get("chunk") is not None:
             lines.append(f"chunk: {t['chunk']}")
+        if t.get("sub_progress") is not None:
+            done, total = t["sub_progress"]
+            lines.append(f"sub_progress: {done}/{total}")
         blocks.append("\n".join(lines) + "\n")
     return header + "\n".join(blocks)
 
