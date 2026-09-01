@@ -220,5 +220,53 @@ class RenderCardTests(unittest.TestCase):
         self.assertNotIn('class="labels"', html_out)
 
 
+class ServerOfflineBannerTests(unittest.TestCase):
+    """#17: fetch() rejection (server unreachable) on any of the three API
+    actions must reveal the persistent header banner; a resolved non-OK
+    response (server running, answering with an error) must not."""
+
+    def _html(self, **kwargs):
+        t = ticket(1)
+        defaults = dict(known_repos=["a/b"], active_repo="a/b", offer_refresh=True)
+        defaults.update(kwargs)
+        return gd.build_html([t], **defaults)
+
+    def test_banner_markup_present_and_hidden_by_default(self):
+        html_out = self._html()
+        self.assertIn('id="server-offline-banner"', html_out)
+        self.assertIn('class="server-offline-banner" hidden', html_out)
+
+    def test_banner_present_even_without_repo_switcher_or_refresh(self):
+        # ticket-status toggle is always rendered, so the banner must be too.
+        html_out = self._html(known_repos=None, active_repo=None, offer_refresh=False)
+        self.assertIn('id="server-offline-banner"', html_out)
+
+    def test_all_three_actions_call_show_banner_on_catch(self):
+        html_out = self._html()
+        self.assertIn("window.showServerOfflineBanner = function", html_out)
+        self.assertEqual(html_out.count("showServerOfflineBanner()"), 3)
+
+    def test_repo_switch_catch_shows_banner_before_ok_check(self):
+        html_out = self._html()
+        script = gd.render_repo_switcher(["a/b"], "a/b")
+        self.assertIn("} catch (err) {\n            window.showServerOfflineBanner();", script)
+        self.assertIn("if (!res.ok) {", script)
+
+    def test_refresh_catch_shows_banner_and_non_ok_does_not(self):
+        script = gd.render_refresh_button()
+        self.assertIn("} catch (err) {\n            window.showServerOfflineBanner();", script)
+        # non-OK branch (server running, answered with an error) must not
+        # call the banner helper.
+        not_ok_branch = script.split("if (!res.ok) {")[1].split("return;")[0]
+        self.assertNotIn("showServerOfflineBanner", not_ok_branch)
+
+    def test_ticket_status_toggle_catch_shows_banner(self):
+        html_out = self._html()
+        self.assertIn(
+            "} catch (err) {\n        window.showServerOfflineBanner();",
+            html_out,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -281,11 +281,17 @@ def render_repo_switcher(known_repos: list[str], active_repo: str) -> str:
         const addBtn = document.getElementById('repo-add-btn');
 
         async function switchRepo(repo) {{
-          const res = await fetch('/api/repos', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{ repo }}),
-          }});
+          let res;
+          try {{
+            res = await fetch('/api/repos', {{
+              method: 'POST',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify({{ repo }}),
+            }});
+          }} catch (err) {{
+            window.showServerOfflineBanner();
+            return;
+          }}
           if (!res.ok) {{
             const body = await res.json().catch(() => ({{}}));
             alert(body.error || 'Nepodařilo se přepnout repo.');
@@ -317,20 +323,23 @@ def render_refresh_button() -> str:
         btn.addEventListener('click', async () => {
           btn.disabled = true;
           status.textContent = 'Aktualizuji z GitHubu…';
+          let res;
           try {
-            const res = await fetch('/api/refresh', { method: 'POST' });
-            if (!res.ok) {
-              const body = await res.json().catch(() => ({}));
-              status.textContent = body.error || 'Aktualizace selhala.';
-              btn.disabled = false;
-              return;
-            }
-            sessionStorage.setItem('tt-toast-refreshed', '1');
-            window.location.reload();
+            res = await fetch('/api/refresh', { method: 'POST' });
           } catch (err) {
-            status.textContent = 'Aktualizace selhala.';
+            window.showServerOfflineBanner();
+            status.textContent = 'Server není dostupný.';
             btn.disabled = false;
+            return;
           }
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            status.textContent = body.error || 'Aktualizace selhala.';
+            btn.disabled = false;
+            return;
+          }
+          sessionStorage.setItem('tt-toast-refreshed', '1');
+          window.location.reload();
         });
       })();
     </script>
@@ -482,6 +491,18 @@ def build_html(
   .meta {{
     color: var(--muted);
     font-size: 13px;
+  }}
+  .server-offline-banner {{
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--amber-bg);
+    color: var(--amber);
+    font-size: 13px;
+    font-weight: 600;
+  }}
+  .server-offline-banner[hidden] {{
+    display: none;
   }}
   .repo-switcher {{
     display: flex;
@@ -732,6 +753,7 @@ def build_html(
 </head>
 <body>
 <header>
+  <div id="server-offline-banner" class="server-offline-banner" hidden>Server TicketTraceru neběží nebo není dostupný. Spusť ho znovu a obnov stránku — do té doby akce v diagramu nebudou fungovat.</div>
   <h1>DigiLearn — implementační tickety (#19–#31)</h1>
   <div class="meta">generation core · tracer-bullet rozpad specu #18 · vygenerováno {now}</div>
   {header_extra}
@@ -799,6 +821,11 @@ def build_html(
   const cards = Array.from(document.querySelectorAll('.card'));
   const repoShortName = {json.dumps(repo_short_name)};
 
+  const offlineBanner = document.getElementById('server-offline-banner');
+  window.showServerOfflineBanner = function() {{
+    if (offlineBanner) offlineBanner.hidden = false;
+  }};
+
   const toastEl = document.getElementById('toast');
   let toastTimer = null;
   function showToast(text) {{
@@ -841,11 +868,17 @@ def build_html(
       e.preventDefault();
       e.stopPropagation();
       const ticket = Number(btn.dataset.toggleStatus);
-      const res = await fetch('/api/ticket-status', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ ticket }}),
-      }});
+      let res;
+      try {{
+        res = await fetch('/api/ticket-status', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ ticket }}),
+        }});
+      }} catch (err) {{
+        window.showServerOfflineBanner();
+        return;
+      }}
       if (res.ok) {{
         window.location.reload();
       }} else {{
