@@ -78,6 +78,9 @@ def parse_tickets(text: str) -> list[Ticket]:
         else:
             sub_progress = None
 
+        labels_raw = data.get("labels", "").strip()
+        labels = [x.strip() for x in labels_raw.split(",") if x.strip()] if labels_raw else []
+
         tickets.append(
             Ticket(
                 number=number,
@@ -87,6 +90,7 @@ def parse_tickets(text: str) -> list[Ticket]:
                 part_of=part_of,
                 chunk=chunk,
                 sub_progress=sub_progress,
+                labels=labels,
             )
         )
 
@@ -111,6 +115,8 @@ def render_tickets_file(header: str, tickets: list[Ticket]) -> str:
         if t.sub_progress is not None:
             done, total = t.sub_progress
             lines.append(f"sub_progress: {done}/{total}")
+        if t.labels:
+            lines.append(f"labels: {','.join(t.labels)}")
         blocks.append("\n".join(lines) + "\n")
     return header + "\n".join(blocks)
 

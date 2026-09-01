@@ -103,6 +103,35 @@ class BuildTicketsFromIssuesTests(unittest.TestCase):
         raw = [{"number": 1, "title": "First", "state": "OPEN", "body": "", "subIssues": {"nodes": []}}]
         tickets = gr.build_tickets_from_issues(raw)
         self.assertIsNone(tickets[0].chunk)
+        self.assertEqual(tickets[0].labels, [])
+
+    def test_labels_captured_excluding_chunk_label(self):
+        raw = [
+            {
+                "number": 1,
+                "title": "First",
+                "state": "OPEN",
+                "body": "",
+                "subIssues": {"nodes": []},
+                "labels": {"nodes": [{"name": "Chunk #1"}, {"name": "bug"}, {"name": "ui"}]},
+            },
+        ]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertEqual(tickets[0].labels, ["bug", "ui"])
+
+    def test_only_chunk_label_gives_empty_labels(self):
+        raw = [
+            {
+                "number": 1,
+                "title": "First",
+                "state": "OPEN",
+                "body": "",
+                "subIssues": {"nodes": []},
+                "labels": {"nodes": [{"name": "Chunk #1"}]},
+            },
+        ]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertEqual(tickets[0].labels, [])
 
     def test_sub_issues_become_part_of_badge_only(self):
         raw = [

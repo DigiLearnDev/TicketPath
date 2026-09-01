@@ -233,6 +233,13 @@ def render_card(card: CardLayout) -> str:
         sub_done, sub_total = sub_progress
         sub_progress_html = f'<div class="sub-progress">{sub_done}/{sub_total}</div>'
 
+    labels_html = ""
+    if ticket.labels:
+        label_spans = "".join(
+            f'<span class="label-badge">{html.escape(label)}</span>' for label in ticket.labels
+        )
+        labels_html = f'<div class="labels">{label_spans}</div>'
+
     badge = (
         f'<span class="badge {card.badge}">{BADGE_LABELS[card.badge]}</span>'
         if card.badge
@@ -251,6 +258,7 @@ def render_card(card: CardLayout) -> str:
         <h3>{title}</h3>
         {part_of_html}
         {sub_progress_html}
+        {labels_html}
         {dep_html}
       </article>
     """
@@ -656,6 +664,19 @@ def build_html(
     font-size: 11px;
     color: var(--muted);
     margin: -2px 0 6px;
+  }}
+  .labels {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: -2px 0 6px;
+  }}
+  .label-badge {{
+    font-size: 10.5px;
+    color: var(--muted);
+    background: var(--gray-bg);
+    padding: 1px 7px;
+    border-radius: 999px;
   }}
   .card h3 {{
     font-size: 13.5px;

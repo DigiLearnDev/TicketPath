@@ -8,7 +8,7 @@ import generate_diagram as gd
 from ticket import Ticket
 
 
-def ticket(number, blocked_by=None, chunk=None, sub_progress=None):
+def ticket(number, blocked_by=None, chunk=None, sub_progress=None, labels=None):
     return Ticket(
         number=number,
         title=f"T{number}",
@@ -17,6 +17,7 @@ def ticket(number, blocked_by=None, chunk=None, sub_progress=None):
         part_of=None,
         chunk=chunk,
         sub_progress=sub_progress,
+        labels=labels or [],
     )
 
 
@@ -202,6 +203,21 @@ class RenderCardTests(unittest.TestCase):
         card = gd.compute_diagram_layout([t]).columns[0].cards[0]
         html_out = gd.render_card(card)
         self.assertIn('class="sub-progress"', html_out)
+
+    def test_shows_a_badge_per_label(self):
+        t = ticket(1, labels=["bug", "ui"])
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
+        self.assertIn("bug", html_out)
+        self.assertIn("ui", html_out)
+        self.assertEqual(html_out.count("label-badge"), 2)
+
+    def test_no_label_markup_when_no_labels(self):
+        t = ticket(1)
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
+        self.assertNotIn("label-badge", html_out)
+        self.assertNotIn('class="labels"', html_out)
 
 
 if __name__ == "__main__":

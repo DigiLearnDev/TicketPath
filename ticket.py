@@ -9,7 +9,7 @@ AttributeError instead of a silent None.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -21,3 +21,4 @@ class Ticket:
     part_of: int | None = None
     chunk: int | None = None
     sub_progress: tuple[int, int] | None = None
+    labels: list[str] = field(default_factory=list)

@@ -46,6 +46,17 @@ class ParseTicketsTests(unittest.TestCase):
         self.assertIsNone(t.part_of)
         self.assertIsNone(t.chunk)
         self.assertIsNone(t.sub_progress)
+        self.assertEqual(t.labels, [])
+
+    def test_labels_parsed_from_comma_separated_list(self):
+        text = "ticket: 1\ntitle: T\nstatus: open\nblocked_by: none\nlabels: bug,ui\n"
+        t = ticket_store.parse_tickets(text)[0]
+        self.assertEqual(t.labels, ["bug", "ui"])
+
+    def test_missing_labels_field_is_backwards_compatible(self):
+        text = "ticket: 1\ntitle: T\nstatus: open\nblocked_by: none\n"
+        t = ticket_store.parse_tickets(text)[0]
+        self.assertEqual(t.labels, [])
 
     def test_sorted_by_number(self):
         text = "ticket: 5\ntitle: B\nstatus: open\nblocked_by: none\n\nticket: 1\ntitle: A\nstatus: open\nblocked_by: none\n"
@@ -105,6 +116,18 @@ class RenderTicketsFileTests(unittest.TestCase):
         text = ticket_store.render_tickets_file(header, tickets)
         self.assertNotIn("sub_progress:", text)
 
+    def test_labels_line_emitted_when_present(self):
+        header = ""
+        tickets = [Ticket(number=1, title="T", status="open", blocked_by=[], labels=["bug", "ui"])]
+        text = ticket_store.render_tickets_file(header, tickets)
+        self.assertIn("labels: bug,ui\n", text)
+
+    def test_labels_line_omitted_when_absent(self):
+        header = ""
+        tickets = [Ticket(number=1, title="T", status="open", blocked_by=[], labels=[])]
+        text = ticket_store.render_tickets_file(header, tickets)
+        self.assertNotIn("labels:", text)
+
 
 class RoundTripTests(unittest.TestCase):
     def test_saved_file_loads_back_to_same_tickets(self):
@@ -118,6 +141,7 @@ class RoundTripTests(unittest.TestCase):
                 part_of=1,
                 chunk=2,
                 sub_progress=(3, 5),
+                labels=["bug", "ui"],
             ),
         ]
         with TemporaryDirectory() as d:

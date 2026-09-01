@@ -82,6 +82,7 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[Ticket]:
     for issue in raw_issues:
         number = issue["number"]
         label_names = [n["name"] for n in issue.get("labels", {}).get("nodes", [])]
+        visible_labels = [name for name in label_names if not CHUNK_LABEL_RE.search(name)]
         tickets.append(
             Ticket(
                 number=number,
@@ -91,6 +92,7 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[Ticket]:
                 part_of=part_of.get(number),
                 chunk=parse_chunk(label_names),
                 sub_progress=sub_progress(issue.get("subIssues", {}).get("nodes", [])),
+                labels=visible_labels,
             )
         )
     tickets.sort(key=lambda t: t.number)
