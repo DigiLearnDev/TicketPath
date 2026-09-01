@@ -1,9 +1,12 @@
-"""GitHub refresh: pulls all issues for a repo via `gh api graphql` (read-only,
+"""GitHub adapter: pulls all issues for a repo via `gh api graphql` (read-only,
 relies on the machine's already-authenticated `gh` — no token is stored or
-written to any file) and turns them into tickets.txt records.
+written to any file) and translates them into Tickets.
 
-Kept separate from repo_store.py (local persistence) and generate_diagram.py
-(rendering) so the GitHub-specific parsing/query logic has its own seam.
+This module only downloads and translates — it never touches disk. The
+refresh sequence (fetch -> diff against prior state -> save) is owned by the
+caller (see server.py's refresh_repo), which is what keeps the dependency
+arrows pointing one way and lets refresh be tested with a faked fetch, no
+`gh` involved.
 """
 from __future__ import annotations
 
@@ -126,27 +129,3 @@ def fetch_all_issues(repo: str) -> list[dict]:
         after = page["pageInfo"]["endCursor"]
 
     return issues
-
-
-def refresh_repo(repo: str) -> tuple[list[Ticket], set[int]]:
-    """Fetches fresh issue data for `repo`, rewrites its tickets.txt, and returns
-    (tickets, newly_discovered_ticket_numbers). The "new" badge is transient
-    (in-memory, per the spec) and disappears on the next refresh with no
-    persisted dismiss state.
-    """
-    import repo_store
-    import ticket_store
-
-    path = repo_store.tickets_path(repo)
-    old_text = path.read_text(encoding="utf-8") if path.exists() else ""
-    old_tickets = ticket_store.parse_tickets(old_text) if old_text else []
-    old_numbers = {t.number for t in old_tickets}
-
-    raw_issues = fetch_all_issues(repo)
-    tickets = build_tickets_from_issues(raw_issues)
-    new_numbers = diff_new_tickets(old_numbers, {t.number for t in tickets})
-
-    header = ticket_store.split_header(old_text)
-    ticket_store.save_tickets(path, tickets, header)
-
-    return tickets, new_numbers

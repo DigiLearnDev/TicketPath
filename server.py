@@ -18,6 +18,7 @@ import github_refresh
 import repo_store
 import ticket_store
 from generate_diagram import build_html
+from ticket import Ticket
 
 HOST = "localhost"
 PORT = 8765
@@ -26,6 +27,28 @@ PORT = 8765
 # persist — it is only ever known for the lifetime of this server process and
 # is overwritten wholesale by the next refresh. Never written to disk.
 _new_tickets_by_repo: dict[str, set[int]] = {}
+
+
+def refresh_repo(repo: str) -> tuple[list[Ticket], set[int]]:
+    """Orchestrates a refresh: downloads via github_refresh, diffs against the
+    tickets already on disk, then saves. github_refresh only fetches and
+    translates — this sequencing (and the disk access) lives here so it can
+    be tested with a faked fetch, without calling `gh`.
+    """
+    repo_store.ensure_repo_files(repo)
+    path = repo_store.tickets_path(repo)
+    old_text = path.read_text(encoding="utf-8") if path.exists() else ""
+    old_tickets = ticket_store.parse_tickets(old_text) if old_text else []
+    old_numbers = {t.number for t in old_tickets}
+
+    raw_issues = github_refresh.fetch_all_issues(repo)
+    tickets = github_refresh.build_tickets_from_issues(raw_issues)
+    new_numbers = github_refresh.diff_new_tickets(old_numbers, {t.number for t in tickets})
+
+    header = ticket_store.split_header(old_text)
+    ticket_store.save_tickets(path, tickets, header)
+
+    return tickets, new_numbers
 
 
 class DiagramHandler(BaseHTTPRequestHandler):
@@ -111,7 +134,7 @@ class DiagramHandler(BaseHTTPRequestHandler):
         state = repo_store.load_app_state()
         repo = state["active_repo"]
         try:
-            tickets, new_numbers = github_refresh.refresh_repo(repo)
+            tickets, new_numbers = refresh_repo(repo)
         except Exception as exc:  # subprocess failure, malformed gh output, etc.
             self._send_json(502, {"error": f"GitHub refresh selhal: {exc}"})
             return
