@@ -198,6 +198,12 @@ def render_card(
     if ticket.get("part_of") is not None:
         part_of_html = f'<div class="part-of">část #{ticket["part_of"]}</div>'
 
+    sub_progress_html = ""
+    sub_progress = ticket.get("sub_progress")
+    if sub_progress is not None:
+        sub_done, sub_total = sub_progress
+        sub_progress_html = f'<div class="sub-progress">{sub_done}/{sub_total}</div>'
+
     badge = ""
     if is_new:
         badge = '<span class="badge new">nové</span>'
@@ -217,6 +223,7 @@ def render_card(
         </div>
         <h3>{title}</h3>
         {part_of_html}
+        {sub_progress_html}
         {dep_html}
       </article>
     """
@@ -524,6 +531,11 @@ def build_html(
   .badge.blocked {{ background: var(--gray-bg); color: var(--muted); }}
   .badge.new {{ background: var(--amber-bg); color: var(--amber); }}
   .part-of {{
+    font-size: 11px;
+    color: var(--muted);
+    margin: -2px 0 6px;
+  }}
+  .sub-progress {{
     font-size: 11px;
     color: var(--muted);
     margin: -2px 0 6px;

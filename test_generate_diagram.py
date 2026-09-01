@@ -7,7 +7,7 @@ import unittest
 import generate_diagram as gd
 
 
-def ticket(number, blocked_by=None, chunk=None):
+def ticket(number, blocked_by=None, chunk=None, sub_progress=None):
     return {
         "number": number,
         "title": f"T{number}",
@@ -15,6 +15,7 @@ def ticket(number, blocked_by=None, chunk=None):
         "blocked_by": blocked_by or [],
         "part_of": None,
         "chunk": chunk,
+        "sub_progress": sub_progress,
     }
 
 
@@ -101,6 +102,23 @@ class EffectiveLayersAndDividersTests(unittest.TestCase):
         ]
         effective, _ = gd.effective_layers_and_dividers(tickets)
         self.assertGreater(effective[4], effective[3])
+
+
+class RenderCardSubProgressTests(unittest.TestCase):
+    def test_shows_badge_when_sub_progress_present(self):
+        t = ticket(1, sub_progress=(2, 5))
+        html_out = gd.render_card(t, "open", {1: t})
+        self.assertIn("2/5", html_out)
+
+    def test_no_badge_when_sub_progress_absent(self):
+        t = ticket(1)
+        html_out = gd.render_card(t, "open", {1: t})
+        self.assertNotIn("sub-progress", html_out)
+
+    def test_badge_class_present_for_styling(self):
+        t = ticket(1, sub_progress=(0, 3))
+        html_out = gd.render_card(t, "open", {1: t})
+        self.assertIn('class="sub-progress"', html_out)
 
 
 if __name__ == "__main__":
