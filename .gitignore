@@ -1,6 +1,7 @@
 diagram.html
 app-state.json
 data/*/diagram-state.json
+data/*/tickets.txt
 __pycache__/
 *.pyc
 .vs/
