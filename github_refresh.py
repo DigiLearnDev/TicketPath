@@ -11,6 +11,8 @@ import json
 import re
 import subprocess
 
+from ticket import Ticket
+
 GRAPHQL_QUERY = """
 query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
@@ -67,7 +69,7 @@ def sub_progress(sub_issues: list[dict]) -> tuple[int, int] | None:
     return (done, len(sub_issues))
 
 
-def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
+def build_tickets_from_issues(raw_issues: list[dict]) -> list[Ticket]:
     part_of: dict[int, int] = {}
     for issue in raw_issues:
         for sub in issue.get("subIssues", {}).get("nodes", []):
@@ -78,17 +80,17 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[dict]:
         number = issue["number"]
         label_names = [n["name"] for n in issue.get("labels", {}).get("nodes", [])]
         tickets.append(
-            {
-                "number": number,
-                "title": issue["title"],
-                "status": "closed" if issue["state"] == "CLOSED" else "open",
-                "blocked_by": parse_blocked_by(issue.get("body")),
-                "part_of": part_of.get(number),
-                "chunk": parse_chunk(label_names),
-                "sub_progress": sub_progress(issue.get("subIssues", {}).get("nodes", [])),
-            }
+            Ticket(
+                number=number,
+                title=issue["title"],
+                status="closed" if issue["state"] == "CLOSED" else "open",
+                blocked_by=parse_blocked_by(issue.get("body")),
+                part_of=part_of.get(number),
+                chunk=parse_chunk(label_names),
+                sub_progress=sub_progress(issue.get("subIssues", {}).get("nodes", [])),
+            )
         )
-    tickets.sort(key=lambda t: t["number"])
+    tickets.sort(key=lambda t: t.number)
     return tickets
 
 
@@ -104,22 +106,22 @@ def split_header(text: str) -> str:
     return text[: match.start()]
 
 
-def render_tickets_file(header: str, tickets: list[dict]) -> str:
+def render_tickets_file(header: str, tickets: list[Ticket]) -> str:
     blocks = []
     for t in tickets:
-        blocked_by = ",".join(str(b) for b in t["blocked_by"]) if t["blocked_by"] else "none"
+        blocked_by = ",".join(str(b) for b in t.blocked_by) if t.blocked_by else "none"
         lines = [
-            f"ticket: {t['number']}",
-            f"title: {t['title']}",
-            f"status: {t['status']}",
+            f"ticket: {t.number}",
+            f"title: {t.title}",
+            f"status: {t.status}",
             f"blocked_by: {blocked_by}",
         ]
-        if t.get("part_of") is not None:
-            lines.append(f"part_of: {t['part_of']}")
-        if t.get("chunk") is not None:
-            lines.append(f"chunk: {t['chunk']}")
-        if t.get("sub_progress") is not None:
-            done, total = t["sub_progress"]
+        if t.part_of is not None:
+            lines.append(f"part_of: {t.part_of}")
+        if t.chunk is not None:
+            lines.append(f"chunk: {t.chunk}")
+        if t.sub_progress is not None:
+            done, total = t.sub_progress
             lines.append(f"sub_progress: {done}/{total}")
         blocks.append("\n".join(lines) + "\n")
     return header + "\n".join(blocks)
@@ -155,7 +157,7 @@ def fetch_all_issues(repo: str) -> list[dict]:
     return issues
 
 
-def refresh_repo(repo: str) -> tuple[list[dict], set[int]]:
+def refresh_repo(repo: str) -> tuple[list[Ticket], set[int]]:
     """Fetches fresh issue data for `repo`, rewrites its tickets.txt, and returns
     (tickets, newly_discovered_ticket_numbers). The "new" badge is transient
     (in-memory, per the spec) and disappears on the next refresh with no
@@ -167,11 +169,11 @@ def refresh_repo(repo: str) -> tuple[list[dict], set[int]]:
     path = repo_store.tickets_path(repo)
     old_text = path.read_text(encoding="utf-8") if path.exists() else ""
     old_tickets = generate_diagram.parse_tickets(path) if path.exists() else []
-    old_numbers = {t["number"] for t in old_tickets}
+    old_numbers = {t.number for t in old_tickets}
 
     raw_issues = fetch_all_issues(repo)
     tickets = build_tickets_from_issues(raw_issues)
-    new_numbers = diff_new_tickets(old_numbers, {t["number"] for t in tickets})
+    new_numbers = diff_new_tickets(old_numbers, {t.number for t in tickets})
 
     header = split_header(old_text)
     path.write_text(render_tickets_file(header, tickets), encoding="utf-8")

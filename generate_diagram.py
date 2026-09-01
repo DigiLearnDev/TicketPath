@@ -15,12 +15,13 @@ from datetime import datetime
 from pathlib import Path
 
 import repo_store
+from ticket import Ticket
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_FILE = HERE / "diagram.html"
 
 
-def parse_tickets(path: Path) -> list[dict]:
+def parse_tickets(path: Path) -> list[Ticket]:
     lines = path.read_text(encoding="utf-8").splitlines()
 
     blocks: list[list[str]] = []
@@ -72,30 +73,30 @@ def parse_tickets(path: Path) -> list[dict]:
             sub_progress = None
 
         tickets.append(
-            {
-                "number": number,
-                "title": title,
-                "status": status,
-                "blocked_by": blocked_by,
-                "part_of": part_of,
-                "chunk": chunk,
-                "sub_progress": sub_progress,
-            }
+            Ticket(
+                number=number,
+                title=title,
+                status=status,
+                blocked_by=blocked_by,
+                part_of=part_of,
+                chunk=chunk,
+                sub_progress=sub_progress,
+            )
         )
 
-    tickets.sort(key=lambda t: t["number"])
+    tickets.sort(key=lambda t: t.number)
     return tickets
 
 
 def compute_layers(
-    tickets: list[dict], extra_blocked_by: dict[int, list[int]] | None = None
+    tickets: list[Ticket], extra_blocked_by: dict[int, list[int]] | None = None
 ) -> dict[int, int]:
     """Layer = longest blocked_by chain to a ticket with no blockers. `extra_blocked_by`
     adds synthetic dependencies (e.g. a chunk floor) into the same recursion, so they
     propagate exactly like a real blocked_by edge — including transitively, to tickets
     that depend on a ticket carrying an extra dependency of its own."""
     extra_blocked_by = extra_blocked_by or {}
-    by_number = {t["number"]: t for t in tickets}
+    by_number = {t.number: t for t in tickets}
     layer_cache: dict[int, int] = {}
 
     def layer_of(number: int, stack: set[int]) -> int:
@@ -105,7 +106,7 @@ def compute_layers(
             # Cyklus v datech (nemel by nastat) — radeji nespadnout.
             return 0
         stack = stack | {number}
-        blockers = by_number.get(number, {}).get("blocked_by", []) + extra_blocked_by.get(number, [])
+        blockers = (by_number[number].blocked_by if number in by_number else []) + extra_blocked_by.get(number, [])
         if not blockers:
             result = 0
         else:
@@ -115,10 +116,10 @@ def compute_layers(
         layer_cache[number] = result
         return result
 
-    return {t["number"]: layer_of(t["number"], set()) for t in tickets}
+    return {t.number: layer_of(t.number, set()) for t in tickets}
 
 
-def effective_layers_and_dividers(tickets: list[dict]) -> tuple[dict[int, int], list[dict]]:
+def effective_layers_and_dividers(tickets: list[Ticket]) -> tuple[dict[int, int], list[dict]]:
     """Derives each ticket's effective layer from its `blocked_by` chain plus a
     floor implied by its `Chunk #N` label, and the phase dividers that floor
     implies.
@@ -138,8 +139,8 @@ def effective_layers_and_dividers(tickets: list[dict]) -> tuple[dict[int, int], 
     """
     by_chunk: dict[int, list[int]] = {}
     for t in tickets:
-        if t.get("chunk") is not None:
-            by_chunk.setdefault(t["chunk"], []).append(t["number"])
+        if t.chunk is not None:
+            by_chunk.setdefault(t.chunk, []).append(t.number)
 
     synthetic_blockers: dict[int, list[int]] = {}
     lower_chunks_union: list[int] = []
@@ -158,13 +159,13 @@ def effective_layers_and_dividers(tickets: list[dict]) -> tuple[dict[int, int], 
     return effective, dividers
 
 
-def ticket_state(ticket: dict, by_number: dict[int, dict]) -> str:
-    if ticket["status"] == "closed":
+def ticket_state(ticket: Ticket, by_number: dict[int, Ticket]) -> str:
+    if ticket.status == "closed":
         return "done"
-    blockers = ticket["blocked_by"]
+    blockers = ticket.blocked_by
     if not blockers:
         return "ready"
-    if all(by_number[b]["status"] == "closed" for b in blockers if b in by_number):
+    if all(by_number[b].status == "closed" for b in blockers if b in by_number):
         return "ready"
     return "blocked"
 
@@ -174,32 +175,32 @@ ICON_DONE = """<svg viewBox="0 0 20 20" class="icon"><circle cx="10" cy="10" r="
 
 
 def render_card(
-    ticket: dict,
+    ticket: Ticket,
     state: str,
-    by_number: dict[int, dict],
+    by_number: dict[int, Ticket],
     is_new: bool = False,
 ) -> str:
     icon = ICON_DONE if state == "done" else ICON_OPEN
-    title = html.escape(ticket["title"])
-    number = ticket["number"]
+    title = html.escape(ticket.title)
+    number = ticket.number
 
-    blockers = ticket["blocked_by"]
+    blockers = ticket.blocked_by
     dep_html = ""
     if blockers:
         parts = []
         for b in blockers:
-            b_title = by_number.get(b, {}).get("title", "")
-            b_done = by_number.get(b, {}).get("status") == "closed"
+            b_title = by_number[b].title if b in by_number else ""
+            b_done = by_number[b].status == "closed" if b in by_number else False
             cls = "dep done" if b_done else "dep"
             parts.append(f'<span class="{cls}" title="{html.escape(b_title)}">#{b}</span>')
         dep_html = f'<div class="deps">čeká na: {" ".join(parts)}</div>'
 
     part_of_html = ""
-    if ticket.get("part_of") is not None:
-        part_of_html = f'<div class="part-of">část #{ticket["part_of"]}</div>'
+    if ticket.part_of is not None:
+        part_of_html = f'<div class="part-of">část #{ticket.part_of}</div>'
 
     sub_progress_html = ""
-    sub_progress = ticket.get("sub_progress")
+    sub_progress = ticket.sub_progress
     if sub_progress is not None:
         sub_done, sub_total = sub_progress
         sub_progress_html = f'<div class="sub-progress">{sub_done}/{sub_total}</div>'
@@ -240,7 +241,7 @@ def render_divider(divider: dict) -> str:
 
 
 def build_html(
-    tickets: list[dict],
+    tickets: list[Ticket],
     header_extra: str = "",
     new_tickets: set[int] | None = None,
     repo_short_name: str = "DigiLearn",
@@ -248,17 +249,17 @@ def build_html(
     if new_tickets is None:
         new_tickets = set()
 
-    by_number = {t["number"]: t for t in tickets}
+    by_number = {t.number: t for t in tickets}
     layers, dividers = effective_layers_and_dividers(tickets)
 
     max_layer = max(layers.values()) if layers else 0
-    columns: list[list[dict]] = [[] for _ in range(max_layer + 1)]
+    columns: list[list[Ticket]] = [[] for _ in range(max_layer + 1)]
     for t in tickets:
-        columns[layers[t["number"]]].append(t)
+        columns[layers[t.number]].append(t)
     for col in columns:
-        col.sort(key=lambda t: t["number"])
+        col.sort(key=lambda t: t.number)
 
-    done_count = sum(1 for t in tickets if t["status"] == "closed")
+    done_count = sum(1 for t in tickets if t.status == "closed")
     total = len(tickets)
     pct = round(100 * done_count / total) if total else 0
 
@@ -280,7 +281,7 @@ def build_html(
                 t,
                 ticket_state(t, by_number),
                 by_number,
-                t["number"] in new_tickets,
+                t.number in new_tickets,
             )
             for t in col
         )

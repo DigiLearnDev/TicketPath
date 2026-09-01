@@ -5,18 +5,19 @@ from __future__ import annotations
 import unittest
 
 import generate_diagram as gd
+from ticket import Ticket
 
 
 def ticket(number, blocked_by=None, chunk=None, sub_progress=None):
-    return {
-        "number": number,
-        "title": f"T{number}",
-        "status": "open",
-        "blocked_by": blocked_by or [],
-        "part_of": None,
-        "chunk": chunk,
-        "sub_progress": sub_progress,
-    }
+    return Ticket(
+        number=number,
+        title=f"T{number}",
+        status="open",
+        blocked_by=blocked_by or [],
+        part_of=None,
+        chunk=chunk,
+        sub_progress=sub_progress,
+    )
 
 
 class EffectiveLayersAndDividersTests(unittest.TestCase):
