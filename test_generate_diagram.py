@@ -70,11 +70,11 @@ class EffectiveLayersAndDividersTests(unittest.TestCase):
         self.assertEqual(dividers[0]["label"], "Chunk #1")
         self.assertEqual(dividers[1]["label"], "Chunk #2")
 
-    def test_divider_anchored_after_rightmost_ticket_in_its_chunk(self):
+    def test_divider_anchored_before_leftmost_ticket_in_its_chunk(self):
         tickets = [ticket(1, chunk=1), ticket(2, blocked_by=[1], chunk=1), ticket(3, chunk=2)]
         effective, dividers = gd.effective_layers_and_dividers(tickets)
         chunk1_divider = dividers[0]
-        self.assertEqual(chunk1_divider["after_layer"], effective[2])
+        self.assertEqual(chunk1_divider["before_layer"], effective[1])
         self.assertEqual(effective[3], effective[2] + 1)
 
     def test_chunk_push_propagates_to_unchunked_dependent(self):

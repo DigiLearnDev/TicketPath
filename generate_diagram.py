@@ -133,8 +133,8 @@ def effective_layers_and_dividers(tickets: list[dict]) -> tuple[dict[int, int], 
     have tickets are iterated), so gaps in the numbering don't break the chain.
 
     Returns (effective_layer_by_number, dividers), where each divider is
-    {"label": "Chunk #N", "after_layer": <column index>} — the column after
-    which its line should render, i.e. the rightmost column of that chunk.
+    {"label": "Chunk #N", "before_layer": <column index>} — the column before
+    which its line should render, i.e. the leftmost column of that chunk.
     """
     by_chunk: dict[int, list[int]] = {}
     for t in tickets:
@@ -151,7 +151,7 @@ def effective_layers_and_dividers(tickets: list[dict]) -> tuple[dict[int, int], 
     effective = compute_layers(tickets, synthetic_blockers)
 
     dividers = [
-        {"label": f"Chunk #{chunk}", "after_layer": max(effective[n] for n in by_chunk[chunk])}
+        {"label": f"Chunk #{chunk}", "before_layer": min(effective[n] for n in by_chunk[chunk])}
         for chunk in sorted(by_chunk)
     ]
 
@@ -264,11 +264,15 @@ def build_html(
 
     dividers_by_column: dict[int, list[dict]] = {}
     for d in dividers:
-        dividers_by_column.setdefault(d["after_layer"], []).append(d)
+        dividers_by_column.setdefault(d["before_layer"], []).append(d)
 
     columns_html = []
     for i, col in enumerate(columns):
-        if i > 0 and not dividers_by_column.get(i - 1):
+        column_dividers = dividers_by_column.get(i, [])
+        if column_dividers:
+            for d in column_dividers:
+                columns_html.append(render_divider(d))
+        elif i > 0:
             columns_html.append('<div class="step-divider"></div>')
 
         cards_html = "\n".join(
@@ -287,8 +291,6 @@ def build_html(
         </div>
         """
         )
-        for d in dividers_by_column.get(i, []):
-            columns_html.append(render_divider(d))
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
