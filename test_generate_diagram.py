@@ -105,20 +105,102 @@ class EffectiveLayersAndDividersTests(unittest.TestCase):
         self.assertGreater(effective[4], effective[3])
 
 
-class RenderCardSubProgressTests(unittest.TestCase):
-    def test_shows_badge_when_sub_progress_present(self):
+class ComputeDiagramLayoutTests(unittest.TestCase):
+    def test_sub_progress_passes_through_unchanged(self):
+        tickets = [ticket(1, sub_progress=(2, 5))]
+        layout = gd.compute_diagram_layout(tickets)
+        card = layout.columns[0].cards[0]
+        self.assertEqual(card.ticket.sub_progress, (2, 5))
+
+    def test_badge_is_ready_when_no_blockers(self):
+        tickets = [ticket(1)]
+        layout = gd.compute_diagram_layout(tickets)
+        card = layout.columns[0].cards[0]
+        self.assertEqual(card.state, "ready")
+        self.assertEqual(card.badge, "ready")
+
+    def test_badge_is_blocked_when_blocker_open(self):
+        tickets = [ticket(1), ticket(2, blocked_by=[1])]
+        layout = gd.compute_diagram_layout(tickets)
+        card2 = next(c for col in layout.columns for c in col.cards if c.ticket.number == 2)
+        self.assertEqual(card2.state, "blocked")
+        self.assertEqual(card2.badge, "blocked")
+
+    def test_badge_is_new_even_when_state_is_ready(self):
+        tickets = [ticket(1)]
+        layout = gd.compute_diagram_layout(tickets, new_tickets={1})
+        card = layout.columns[0].cards[0]
+        self.assertEqual(card.state, "ready")
+        self.assertEqual(card.badge, "new")
+
+    def test_badge_is_none_when_done(self):
+        t = ticket(1)
+        t = gd.Ticket(**{**t.__dict__, "status": "closed"})
+        layout = gd.compute_diagram_layout([t])
+        card = layout.columns[0].cards[0]
+        self.assertEqual(card.state, "done")
+        self.assertIsNone(card.badge)
+
+    def test_deps_reflect_blocker_title_and_done_status(self):
+        blocker = ticket(1)
+        blocker = gd.Ticket(**{**blocker.__dict__, "title": "Blocker", "status": "closed"})
+        tickets = [blocker, ticket(2, blocked_by=[1])]
+        layout = gd.compute_diagram_layout(tickets)
+        card2 = next(c for col in layout.columns for c in col.cards if c.ticket.number == 2)
+        self.assertEqual(len(card2.deps), 1)
+        dep = card2.deps[0]
+        self.assertEqual(dep.number, 1)
+        self.assertEqual(dep.title, "Blocker")
+        self.assertTrue(dep.done)
+
+    def test_step_divider_between_plain_columns(self):
+        tickets = [ticket(1), ticket(2, blocked_by=[1])]
+        layout = gd.compute_diagram_layout(tickets)
+        self.assertFalse(layout.columns[0].step_divider)
+        self.assertEqual(layout.columns[0].dividers, [])
+        self.assertTrue(layout.columns[1].step_divider)
+        self.assertEqual(layout.columns[1].dividers, [])
+
+    def test_chunk_divider_suppresses_step_divider(self):
+        tickets = [ticket(1, chunk=1), ticket(2, chunk=2)]
+        layout = gd.compute_diagram_layout(tickets)
+        chunk2_column = layout.columns[1]
+        self.assertFalse(chunk2_column.step_divider)
+        self.assertEqual([d["label"] for d in chunk2_column.dividers], ["Chunk #2"])
+
+    def test_counts_and_percentage(self):
+        t1 = ticket(1)
+        t1 = gd.Ticket(**{**t1.__dict__, "status": "closed"})
+        tickets = [t1, ticket(2), ticket(3), ticket(4)]
+        layout = gd.compute_diagram_layout(tickets)
+        self.assertEqual(layout.done_count, 1)
+        self.assertEqual(layout.total, 4)
+        self.assertEqual(layout.pct, 25)
+
+    def test_empty_tickets_gives_zero_percent(self):
+        layout = gd.compute_diagram_layout([])
+        self.assertEqual(layout.done_count, 0)
+        self.assertEqual(layout.total, 0)
+        self.assertEqual(layout.pct, 0)
+
+
+class RenderCardTests(unittest.TestCase):
+    def test_shows_sub_progress_text_when_present(self):
         t = ticket(1, sub_progress=(2, 5))
-        html_out = gd.render_card(t, "open", {1: t})
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
         self.assertIn("2/5", html_out)
 
-    def test_no_badge_when_sub_progress_absent(self):
+    def test_no_sub_progress_markup_when_absent(self):
         t = ticket(1)
-        html_out = gd.render_card(t, "open", {1: t})
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
         self.assertNotIn("sub-progress", html_out)
 
-    def test_badge_class_present_for_styling(self):
+    def test_sub_progress_class_present_for_styling(self):
         t = ticket(1, sub_progress=(0, 3))
-        html_out = gd.render_card(t, "open", {1: t})
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
         self.assertIn('class="sub-progress"', html_out)
 
 

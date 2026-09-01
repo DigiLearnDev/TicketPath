@@ -11,6 +11,7 @@ from __future__ import annotations
 import html
 import json
 import webbrowser
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -107,26 +108,119 @@ def ticket_state(ticket: Ticket, by_number: dict[int, Ticket]) -> str:
 ICON_OPEN = """<svg viewBox="0 0 20 20" class="icon"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2"/></svg>"""
 ICON_DONE = """<svg viewBox="0 0 20 20" class="icon"><circle cx="10" cy="10" r="9" fill="currentColor"/><path d="M6 10.3l2.5 2.5L14.5 7" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
 
+BADGE_LABELS = {"new": "nové", "ready": "připraveno", "blocked": "blokováno"}
 
-def render_card(
-    ticket: Ticket,
-    state: str,
-    by_number: dict[int, Ticket],
-    is_new: bool = False,
-) -> str:
-    icon = ICON_DONE if state == "done" else ICON_OPEN
+
+@dataclass(frozen=True)
+class Dep:
+    number: int
+    title: str
+    done: bool
+
+
+@dataclass(frozen=True)
+class CardLayout:
+    ticket: Ticket
+    state: str
+    badge: str | None  # "new" | "ready" | "blocked" | None — key into BADGE_LABELS
+    deps: list[Dep] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ColumnLayout:
+    index: int
+    dividers: list[dict]
+    step_divider: bool
+    cards: list[CardLayout] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DiagramLayout:
+    columns: list[ColumnLayout]
+    done_count: int
+    total: int
+    pct: int
+
+
+def compute_diagram_layout(
+    tickets: list[Ticket], new_tickets: set[int] | None = None
+) -> DiagramLayout:
+    """Pure function: turns tickets into the data description the template
+    renders — column assignment, phase dividers, per-card state/badge/deps,
+    and the summary counts. No HTML."""
+    if new_tickets is None:
+        new_tickets = set()
+
+    by_number = {t.number: t for t in tickets}
+    layers, dividers = effective_layers_and_dividers(tickets)
+
+    max_layer = max(layers.values()) if layers else 0
+    columns: list[list[Ticket]] = [[] for _ in range(max_layer + 1)]
+    for t in tickets:
+        columns[layers[t.number]].append(t)
+    for col in columns:
+        col.sort(key=lambda t: t.number)
+
+    dividers_by_column: dict[int, list[dict]] = {}
+    for d in dividers:
+        dividers_by_column.setdefault(d["before_layer"], []).append(d)
+
+    column_layouts: list[ColumnLayout] = []
+    for i, col in enumerate(columns):
+        column_dividers = dividers_by_column.get(i, [])
+        step_divider = not column_dividers and i > 0
+
+        cards: list[CardLayout] = []
+        for t in col:
+            state = ticket_state(t, by_number)
+            is_new = t.number in new_tickets
+            if is_new:
+                badge = "new"
+            elif state == "ready":
+                badge = "ready"
+            elif state == "blocked":
+                badge = "blocked"
+            else:
+                badge = None
+
+            deps = [
+                Dep(
+                    number=b,
+                    title=by_number[b].title if b in by_number else "",
+                    done=by_number[b].status == "closed" if b in by_number else False,
+                )
+                for b in t.blocked_by
+            ]
+            cards.append(CardLayout(ticket=t, state=state, badge=badge, deps=deps))
+
+        column_layouts.append(
+            ColumnLayout(
+                index=i,
+                dividers=column_dividers,
+                step_divider=step_divider,
+                cards=cards,
+            )
+        )
+
+    done_count = sum(1 for t in tickets if t.status == "closed")
+    total = len(tickets)
+    pct = round(100 * done_count / total) if total else 0
+
+    return DiagramLayout(columns=column_layouts, done_count=done_count, total=total, pct=pct)
+
+
+def render_card(card: CardLayout) -> str:
+    ticket = card.ticket
+    icon = ICON_DONE if card.state == "done" else ICON_OPEN
     title = html.escape(ticket.title)
     number = ticket.number
 
-    blockers = ticket.blocked_by
     dep_html = ""
-    if blockers:
-        parts = []
-        for b in blockers:
-            b_title = by_number[b].title if b in by_number else ""
-            b_done = by_number[b].status == "closed" if b in by_number else False
-            cls = "dep done" if b_done else "dep"
-            parts.append(f'<span class="{cls}" title="{html.escape(b_title)}">#{b}</span>')
+    if card.deps:
+        parts = [
+            f'<span class="{"dep done" if dep.done else "dep"}" title="{html.escape(dep.title)}">#{dep.number}</span>'
+            for dep in card.deps
+        ]
         dep_html = f'<div class="deps">čeká na: {" ".join(parts)}</div>'
 
     part_of_html = ""
@@ -139,18 +233,16 @@ def render_card(
         sub_done, sub_total = sub_progress
         sub_progress_html = f'<div class="sub-progress">{sub_done}/{sub_total}</div>'
 
-    badge = ""
-    if is_new:
-        badge = '<span class="badge new">nové</span>'
-    elif state == "ready":
-        badge = '<span class="badge ready">připraveno</span>'
-    elif state == "blocked":
-        badge = '<span class="badge blocked">blokováno</span>'
+    badge = (
+        f'<span class="badge {card.badge}">{BADGE_LABELS[card.badge]}</span>'
+        if card.badge
+        else ""
+    )
 
-    blocked_by_attr = ",".join(str(b) for b in blockers)
+    blocked_by_attr = ",".join(str(dep.number) for dep in card.deps)
 
     return f"""
-      <article class="card {state}" data-ticket="{number}" data-blocked-by="{blocked_by_attr}">
+      <article class="card {card.state}" data-ticket="{number}" data-blocked-by="{blocked_by_attr}">
         <div class="card-top">
           <button type="button" class="status-icon" data-toggle-status="{number}" title="Přepnout stav">{icon}</button>
           <span class="num">#{number}</span>
@@ -180,52 +272,28 @@ def build_html(
     new_tickets: set[int] | None = None,
     repo_short_name: str = "DigiLearn",
 ) -> str:
-    if new_tickets is None:
-        new_tickets = set()
-
-    by_number = {t.number: t for t in tickets}
-    layers, dividers = effective_layers_and_dividers(tickets)
-
-    max_layer = max(layers.values()) if layers else 0
-    columns: list[list[Ticket]] = [[] for _ in range(max_layer + 1)]
-    for t in tickets:
-        columns[layers[t.number]].append(t)
-    for col in columns:
-        col.sort(key=lambda t: t.number)
-
-    done_count = sum(1 for t in tickets if t.status == "closed")
-    total = len(tickets)
-    pct = round(100 * done_count / total) if total else 0
-
-    dividers_by_column: dict[int, list[dict]] = {}
-    for d in dividers:
-        dividers_by_column.setdefault(d["before_layer"], []).append(d)
+    layout = compute_diagram_layout(tickets, new_tickets)
 
     columns_html = []
-    for i, col in enumerate(columns):
-        column_dividers = dividers_by_column.get(i, [])
-        if column_dividers:
-            for d in column_dividers:
+    for col in layout.columns:
+        if col.dividers:
+            for d in col.dividers:
                 columns_html.append(render_divider(d))
-        elif i > 0:
+        elif col.step_divider:
             columns_html.append('<div class="step-divider"></div>')
 
-        cards_html = "\n".join(
-            render_card(
-                t,
-                ticket_state(t, by_number),
-                by_number,
-                t.number in new_tickets,
-            )
-            for t in col
-        )
+        cards_html = "\n".join(render_card(c) for c in col.cards)
         columns_html.append(
             f"""
-        <div class="column" data-layer="{i}">
+        <div class="column" data-layer="{col.index}">
           <div class="column-cards">{cards_html}</div>
         </div>
         """
         )
+
+    done_count = layout.done_count
+    total = layout.total
+    pct = layout.pct
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
