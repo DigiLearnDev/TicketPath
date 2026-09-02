@@ -689,13 +689,15 @@ def build_html(
   }}
   .labels {{
     position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
+    top: 4px;
+    right: 4px;
+    bottom: 4px;
     display: flex;
     flex-direction: row-reverse;
     align-items: stretch;
     margin: 0;
+    border-radius: 6px;
+    overflow: hidden;
   }}
   .label-badge {{
     writing-mode: vertical-rl;
