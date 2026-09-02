@@ -625,13 +625,14 @@ def build_html(
     column-gap: 16px;
   }}
   .card {{
+    position: relative;
     width: 260px;
     flex: none;
     background: var(--panel);
     border: 1px solid var(--border);
     border-left: 4px solid var(--border);
     border-radius: 10px;
-    padding: 12px 14px;
+    padding: 12px 28px 12px 14px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     transition: opacity 0.15s ease;
   }}
@@ -687,17 +688,26 @@ def build_html(
     margin: -2px 0 6px;
   }}
   .labels {{
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin: -2px 0 6px;
+    flex-direction: row-reverse;
+    align-items: stretch;
+    margin: 0;
   }}
   .label-badge {{
+    width: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 10.5px;
     color: var(--muted);
     background: var(--gray-bg);
-    padding: 1px 7px;
-    border-radius: 999px;
+    padding: 0;
+    white-space: nowrap;
+    transform: rotate(-90deg);
   }}
   .card h3 {{
     font-size: 13.5px;
