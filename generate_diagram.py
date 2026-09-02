@@ -827,6 +827,17 @@ def build_html(
   const cards = Array.from(document.querySelectorAll('.card'));
   const repoShortName = {json.dumps(repo_short_name)};
 
+  function centerFirstOpenTicket() {{
+    const firstOpen = cards.find(card => !card.classList.contains('done'));
+    if (!firstOpen) return;
+    const wrapRect = diagramWrap.getBoundingClientRect();
+    const cardRect = firstOpen.getBoundingClientRect();
+    const cardCenter = cardRect.left - wrapRect.left + diagramWrap.scrollLeft + cardRect.width / 2;
+    const targetScrollLeft = cardCenter - diagramWrap.clientWidth / 2;
+    diagramWrap.scrollLeft = Math.max(0, Math.min(targetScrollLeft, diagramWrap.scrollWidth - diagramWrap.clientWidth));
+  }}
+  centerFirstOpenTicket();
+
   const offlineBanner = document.getElementById('server-offline-banner');
   window.showServerOfflineBanner = function() {{
     if (offlineBanner) offlineBanner.hidden = false;
