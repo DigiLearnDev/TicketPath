@@ -759,7 +759,7 @@ def build_html(
 </head>
 <body>
 <header>
-  <div id="server-offline-banner" class="server-offline-banner" hidden>Server TicketTraceru neběží nebo není dostupný. Spusť ho znovu a obnov stránku — do té doby akce v diagramu nebudou fungovat.</div>
+  <div id="server-offline-banner" class="server-offline-banner" hidden>Server TicketPathu neběží nebo není dostupný. Spusť ho znovu a obnov stránku — do té doby akce v diagramu nebudou fungovat.</div>
   <h1>DigiLearn — implementační tickety (#19–#31)</h1>
   <div class="meta">generation core · tracer-bullet rozpad specu #18 · vygenerováno {now}</div>
   {header_extra}

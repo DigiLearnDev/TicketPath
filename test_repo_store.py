@@ -13,7 +13,7 @@ class RepoShortNameTests(unittest.TestCase):
         self.assertEqual(repo_store.repo_short_name("DigiLearnDev/DigiLearn"), "DigiLearn")
 
     def test_other_repo(self):
-        self.assertEqual(repo_store.repo_short_name("DigiLearnDev/TicketTracer"), "TicketTracer")
+        self.assertEqual(repo_store.repo_short_name("DigiLearnDev/TicketPath"), "TicketPath")
 
 
 SAMPLE = """# comment line, should be preserved

@@ -1,4 +1,4 @@
-# Ticket Tracer v2 — Spec
+# Ticket Path v2 — Spec
 
 Zdroj: grill-me relace 2026-08-30. Určeno jako vstup pro pozdější `/to-tickets`.
 

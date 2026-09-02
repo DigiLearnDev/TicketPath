@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "tickettracer",
+      "name": "ticketpath",
       "runtimeExecutable": "python",
       "runtimeArgs": ["server.py"],
       "port": 8765
