@@ -220,6 +220,27 @@ class RenderCardTests(unittest.TestCase):
         self.assertNotIn('class="labels"', html_out)
 
 
+class LabelBadgeCssTests(unittest.TestCase):
+    """Regression: rotate(-90deg) on a box stretched to the card's full
+    height swaps its bounding-box width/height, so the rotated badge grows
+    very wide and spills horizontally into the card body. writing-mode:
+    vertical-rl lays the text out vertically without touching the box's
+    own dimensions, so that must be what .label-badge uses."""
+
+    def _css_rule(self):
+        html_out = gd.build_html(
+            [ticket(1)], known_repos=["a/b"], active_repo="a/b", offer_refresh=True
+        )
+        start = html_out.index(".label-badge {")
+        end = html_out.index("}", start)
+        return html_out[start : end + 1]
+
+    def test_uses_writing_mode_not_rotate_minus_90(self):
+        rule = self._css_rule()
+        self.assertIn("writing-mode: vertical-rl", rule)
+        self.assertNotIn("rotate(-90deg)", rule)
+
+
 class ServerOfflineBannerTests(unittest.TestCase):
     """#17: fetch() rejection (server unreachable) on any of the three API
     actions must reveal the persistent header banner; a resolved non-OK
