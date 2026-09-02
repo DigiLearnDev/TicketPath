@@ -698,6 +698,8 @@ def build_html(
     margin: 0;
   }}
   .label-badge {{
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
     width: 22px;
     display: flex;
     align-items: center;
@@ -707,7 +709,6 @@ def build_html(
     background: var(--gray-bg);
     padding: 0;
     white-space: nowrap;
-    transform: rotate(-90deg);
   }}
   .card h3 {{
     font-size: 13.5px;
