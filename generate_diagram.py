@@ -706,6 +706,7 @@ def build_html(
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     font-size: 10.5px;
     color: var(--muted);
     background: var(--gray-bg);

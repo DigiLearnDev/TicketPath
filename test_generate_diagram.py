@@ -240,6 +240,13 @@ class LabelBadgeCssTests(unittest.TestCase):
         self.assertIn("writing-mode: vertical-rl", rule)
         self.assertNotIn("rotate(-90deg)", rule)
 
+    def test_clips_its_own_overflow(self):
+        """A label longer than the card is tall (e.g. 'wayfinder:map') must
+        not paint past the badge's own box — clipping only on the .labels
+        ancestor doesn't reliably clip a rotated/transformed child."""
+        rule = self._css_rule()
+        self.assertIn("overflow: hidden", rule)
+
 
 class ServerOfflineBannerTests(unittest.TestCase):
     """#17: fetch() rejection (server unreachable) on any of the three API
