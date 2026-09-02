@@ -236,7 +236,8 @@ def render_card(card: CardLayout) -> str:
     labels_html = ""
     if ticket.labels:
         label_spans = "".join(
-            f'<span class="label-badge">{html.escape(label)}</span>' for label in ticket.labels
+            f'<span class="label-badge" title="{html.escape(label)}">{html.escape(label)}</span>'
+            for label in ticket.labels
         )
         labels_html = f'<div class="labels">{label_spans}</div>'
 
@@ -255,11 +256,13 @@ def render_card(card: CardLayout) -> str:
           <span class="num">#{number}</span>
           {badge}
         </div>
-        <h3>{title}</h3>
-        {part_of_html}
-        {sub_progress_html}
-        {labels_html}
-        {dep_html}
+        <div class="card-body">
+          <h3>{title}</h3>
+          {part_of_html}
+          {sub_progress_html}
+          {dep_html}
+          {labels_html}
+        </div>
       </article>
     """
 
@@ -632,7 +635,7 @@ def build_html(
     border: 1px solid var(--border);
     border-left: 4px solid var(--border);
     border-radius: 10px;
-    padding: 12px 28px 12px 14px;
+    padding: 12px 14px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     transition: opacity 0.15s ease;
   }}
@@ -688,30 +691,19 @@ def build_html(
     margin: -2px 0 6px;
   }}
   .labels {{
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    bottom: 4px;
     display: flex;
-    flex-direction: row-reverse;
-    align-items: stretch;
-    margin: 0;
-    border-radius: 6px;
-    overflow: hidden;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 6px 0 0;
   }}
   .label-badge {{
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    width: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    font-size: 10.5px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
     color: var(--muted);
     background: var(--gray-bg);
-    padding: 0;
-    white-space: nowrap;
+    padding: 2px 7px;
   }}
   .card h3 {{
     font-size: 13.5px;

@@ -219,33 +219,71 @@ class RenderCardTests(unittest.TestCase):
         self.assertNotIn("label-badge", html_out)
         self.assertNotIn('class="labels"', html_out)
 
+    def test_labels_render_inside_card_body_not_card_top(self):
+        """The gray label strip must live below the header row (card-top),
+        not span the full card height and bleed into it."""
+        t = ticket(1, labels=["bug"])
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
+        top_idx = html_out.index('class="card-top"')
+        top_close_idx = html_out.index("</div>", top_idx)
+        body_idx = html_out.index('class="card-body"')
+        labels_idx = html_out.index('class="labels"')
+        self.assertLess(top_close_idx, body_idx)
+        self.assertGreater(labels_idx, body_idx)
+
+    def test_labels_render_below_the_dependency_row(self):
+        """Labels are the last thing in the card, under 'čeká na:'."""
+        tickets = [ticket(1), ticket(2, blocked_by=[1], labels=["bug"])]
+        columns = gd.compute_diagram_layout(tickets).columns
+        card = next(
+            c for col in columns for c in col.cards if c.ticket.number == 2
+        )
+        html_out = gd.render_card(card)
+        self.assertGreater(
+            html_out.index('class="labels"'), html_out.index('class="deps"')
+        )
+
+    def test_label_badge_carries_title_for_full_text(self):
+        t = ticket(1, labels=["wayfinder:map"])
+        card = gd.compute_diagram_layout([t]).columns[0].cards[0]
+        html_out = gd.render_card(card)
+        self.assertIn('title="wayfinder:map"', html_out)
+
 
 class LabelBadgeCssTests(unittest.TestCase):
-    """Regression: rotate(-90deg) on a box stretched to the card's full
-    height swaps its bounding-box width/height, so the rotated badge grows
-    very wide and spills horizontally into the card body. writing-mode:
-    vertical-rl lays the text out vertically without touching the box's
-    own dimensions, so that must be what .label-badge uses."""
+    """The label sits in the card's normal flow as a horizontal pill under
+    the dependency row. Every earlier attempt to stand it up vertically
+    along the card's right edge (rotate(-90deg), then writing-mode:
+    vertical-rl) either broke its bounding box or cut the text off, so the
+    badge must stay upright and unrotated."""
 
-    def _css_rule(self):
+    def _css_rule(self, selector=".label-badge {"):
         html_out = gd.build_html(
             [ticket(1)], known_repos=["a/b"], active_repo="a/b", offer_refresh=True
         )
-        start = html_out.index(".label-badge {")
+        start = html_out.index(selector)
         end = html_out.index("}", start)
         return html_out[start : end + 1]
 
-    def test_uses_writing_mode_not_rotate_minus_90(self):
+    def test_is_horizontal_not_rotated(self):
         rule = self._css_rule()
-        self.assertIn("writing-mode: vertical-rl", rule)
-        self.assertNotIn("rotate(-90deg)", rule)
+        self.assertNotIn("writing-mode", rule)
+        self.assertNotIn("rotate", rule)
 
-    def test_clips_its_own_overflow(self):
-        """A label longer than the card is tall (e.g. 'wayfinder:map') must
-        not paint past the badge's own box — clipping only on the .labels
-        ancestor doesn't reliably clip a rotated/transformed child."""
+    def test_shape_matches_the_green_status_badge(self):
+        """Same pill as the header badge, so the card reads as one system."""
         rule = self._css_rule()
-        self.assertIn("overflow: hidden", rule)
+        status_rule = self._css_rule(".badge {")
+        for declaration in ("border-radius: 999px", "padding: 2px 7px"):
+            self.assertIn(declaration, rule)
+            self.assertIn(declaration, status_rule)
+
+    def test_font_matches_the_green_status_badge(self):
+        rule = self._css_rule()
+        self.assertIn("font-size: 10px", rule)
+        self.assertIn("font-weight: 600", rule)
+        self.assertIn("letter-spacing: 0.03em", rule)
 
 
 class ServerOfflineBannerTests(unittest.TestCase):
