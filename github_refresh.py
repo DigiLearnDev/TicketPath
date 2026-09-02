@@ -44,6 +44,7 @@ BLOCKED_BY_SECTION_RE = re.compile(
 )
 ISSUE_REF_RE = re.compile(r"#(\d+)")
 CHUNK_LABEL_RE = re.compile(r"\bchunk\s*#(\d+)", re.IGNORECASE)
+IGNORE_LABEL = "TicketPath_Ignore"
 
 
 def parse_blocked_by(body: str | None) -> list[int]:
@@ -82,6 +83,8 @@ def build_tickets_from_issues(raw_issues: list[dict]) -> list[Ticket]:
     for issue in raw_issues:
         number = issue["number"]
         label_names = [n["name"] for n in issue.get("labels", {}).get("nodes", [])]
+        if IGNORE_LABEL in label_names:
+            continue
         visible_labels = [name for name in label_names if not CHUNK_LABEL_RE.search(name)]
         tickets.append(
             Ticket(

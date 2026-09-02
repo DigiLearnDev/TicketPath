@@ -174,6 +174,35 @@ class BuildTicketsFromIssuesTests(unittest.TestCase):
         tickets = gr.build_tickets_from_issues(raw)
         self.assertIsNone(tickets[0].sub_progress)
 
+    def test_ignore_label_excludes_ticket(self):
+        raw = [
+            {
+                "number": 1,
+                "title": "First",
+                "state": "OPEN",
+                "body": "",
+                "subIssues": {"nodes": []},
+                "labels": {"nodes": [{"name": "TicketPath_Ignore"}]},
+            },
+            {"number": 2, "title": "Second", "state": "OPEN", "body": "", "subIssues": {"nodes": []}},
+        ]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertEqual([t.number for t in tickets], [2])
+
+    def test_ignore_label_alongside_other_labels_excludes_ticket(self):
+        raw = [
+            {
+                "number": 1,
+                "title": "First",
+                "state": "OPEN",
+                "body": "",
+                "subIssues": {"nodes": []},
+                "labels": {"nodes": [{"name": "bug"}, {"name": "TicketPath_Ignore"}]},
+            },
+        ]
+        tickets = gr.build_tickets_from_issues(raw)
+        self.assertEqual(tickets, [])
+
     def test_sorted_by_number(self):
         raw = [
             {"number": 5, "title": "B", "state": "OPEN", "body": "", "subIssues": {"nodes": []}},
